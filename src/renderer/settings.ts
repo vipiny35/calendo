@@ -101,6 +101,8 @@ function startSettings(api: DesktopApi): void {
   const login = requireElement<HTMLInputElement>("login");
   const beep = requireElement<HTMLInputElement>("beep");
   const autoUpdate = requireElement<HTMLInputElement>("auto-update");
+  const showUpcoming = requireElement<HTMLInputElement>("show-upcoming");
+  const calendarAccessStatus = requireElement<HTMLParagraphElement>("calendar-access-status");
   const beepPreview = requireElement<HTMLButtonElement>("beep-preview");
   const theme = requireElement<HTMLSelectElement>("theme");
   const version = requireElement<HTMLParagraphElement>("version");
@@ -172,6 +174,7 @@ function startSettings(api: DesktopApi): void {
     login.checked = settings.launchAtLogin;
     beep.checked = settings.beepOnTheHour;
     autoUpdate.checked = settings.autoUpdate;
+    showUpcoming.checked = settings.showUpcomingEvent;
     theme.value = settings.theme;
   };
 
@@ -184,6 +187,7 @@ function startSettings(api: DesktopApi): void {
     launchAtLogin: login.checked,
     beepOnTheHour: beep.checked,
     autoUpdate: autoUpdate.checked,
+    showUpcomingEvent: showUpcoming.checked,
     theme: theme.value as Theme,
   });
 
@@ -209,6 +213,26 @@ function startSettings(api: DesktopApi): void {
     const patch = patchFromForm();
     applyTheme(patch.theme ?? "system");
     void api.updateSettings(patch);
+  });
+
+  showUpcoming.addEventListener("change", () => {
+    if (!showUpcoming.checked) {
+      calendarAccessStatus.hidden = true;
+      calendarAccessStatus.textContent = "";
+      return;
+    }
+
+    calendarAccessStatus.hidden = false;
+    calendarAccessStatus.textContent = "Requesting Calendar access…";
+    void api.requestCalendarAccess()
+      .then((granted) => {
+        calendarAccessStatus.textContent = granted
+          ? "Calendar access enabled."
+          : "Allow Calendar access in System Settings.";
+      })
+      .catch(() => {
+        calendarAccessStatus.textContent = "Calendar access is unavailable.";
+      });
   });
 
   iconStyles.addEventListener("click", (event) => {

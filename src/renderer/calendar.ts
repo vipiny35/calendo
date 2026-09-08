@@ -14,10 +14,11 @@ import {
   occupancyFromWeeks,
 } from "../shared/month-outline";
 import { menuBarLabel, highlightedColumnRuns, type AppSettings } from "../shared/settings";
+import { eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/events";
 import { lucideIcon } from "./icons";
 import { framedGlyphPng } from "./tray-frame";
 import { installTauriBridge, type DesktopApi } from "./host";
-import { ChevronLeft, ChevronRight, CircleDot, Settings } from "lucide";
+import { ChevronLeft, ChevronRight, CircleDot, Settings, Video } from "lucide";
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -111,10 +112,16 @@ function startCalendar(api: DesktopApi): void {
   const todayButton = requireElement<HTMLButtonElement>("today-month");
   const next = requireElement<HTMLButtonElement>("next-month");
   const settingsButton = requireElement<HTMLButtonElement>("settings");
+  const eventCard = requireElement<HTMLElement>("event-card");
+  const eventStatusLabel = requireElement<HTMLElement>("event-status");
+  const eventTitle = requireElement<HTMLElement>("event-title");
+  const eventMeta = requireElement<HTMLElement>("event-meta");
+  const joinMeeting = requireElement<HTMLButtonElement>("join-meeting");
   prev.append(lucideIcon(ChevronLeft, 18));
   todayButton.append(lucideIcon(CircleDot, 18));
   next.append(lucideIcon(ChevronRight, 18));
   settingsButton.append(lucideIcon(Settings, 16));
+  joinMeeting.append(lucideIcon(Video, 15), document.createTextNode("Join Meeting"));
 
   let settings: AppSettings | null = null;
   let viewYear = new Date().getFullYear();
@@ -122,18 +129,81 @@ function startCalendar(api: DesktopApi): void {
   let focusIso = toIso(new Date());
   let lastTrayLabel = "";
   let lastHour = new Date().getHours();
+  let upcomingEvent: UpcomingEvent | null = null;
+  let eventError: string | null = null;
+  let eventRequest = 0;
+
+  const paintEvent = (): void => {
+    const enabled = settings?.showUpcomingEvent ?? false;
+    eventCard.hidden = !enabled;
+    if (!enabled) return;
+    if (!upcomingEvent) {
+      eventStatusLabel.textContent = eventError ? "Calendar access needed" : "No upcoming events";
+      eventTitle.textContent = eventError ? "Allow Calendar access" : "Your calendar is clear";
+      eventMeta.textContent = eventError
+        ? "Enable Calendar access in System Settings to show meetings."
+        : "New events will appear here automatically.";
+      joinMeeting.hidden = true;
+      return;
+    }
+    const status = eventStatus(upcomingEvent);
+    if (status.label === "No upcoming events") {
+      eventCard.hidden = true;
+      joinMeeting.hidden = true;
+      return;
+    }
+    eventStatusLabel.textContent = status.label;
+    eventTitle.textContent = upcomingEvent.title;
+    eventMeta.textContent = [
+      eventTimeRange(upcomingEvent),
+      upcomingEvent.calendar,
+      upcomingEvent.location,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(" · ");
+    joinMeeting.hidden = !upcomingEvent.joinUrl;
+  };
+
+  const refreshUpcoming = async (): Promise<void> => {
+    const request = ++eventRequest;
+    if (!settings?.showUpcomingEvent) {
+      upcomingEvent = null;
+      eventError = null;
+      paintEvent();
+      refreshTray();
+      return;
+    }
+    try {
+      const nextEvent = await api.getUpcomingEvent();
+      if (request !== eventRequest) return;
+      upcomingEvent = nextEvent;
+      eventError = null;
+    } catch {
+      if (request !== eventRequest) return;
+      upcomingEvent = null;
+      eventError = "Calendar access is not enabled";
+    }
+    paintEvent();
+    refreshTray();
+  };
 
   const refreshTray = (): void => {
     if (!settings) return;
     const now = new Date();
     const label = menuBarLabel(settings, now);
-    const signature = `${label.text ?? ""}|${label.day ?? ""}|${label.style}`;
+    const status = upcomingEvent && now.getTime() < upcomingEvent.endAt
+      ? eventStatus(upcomingEvent, now.getTime()).label
+      : "";
+    const title = label.style === "none"
+      ? `${label.text ?? ""}${status ? ` | ${status}` : ""}`
+      : status ? `| ${status}` : "";
+    const signature = `${title}|${label.day ?? ""}|${label.style}`;
     if (signature === lastTrayLabel) return;
     lastTrayLabel = signature;
     // The cutout style draws its date into the glyph instead of the title.
     const framed = label.style === "framed" ? label.text : null;
     void api.setTrayLabel(
-      framed === null ? label.text : null,
+      title || null,
       label.day,
       label.style,
       framed === null ? null : framedGlyphPng(framed),
@@ -286,6 +356,11 @@ function startCalendar(api: DesktopApi): void {
   settingsButton.addEventListener("click", () => {
     void api.openSettings();
   });
+  joinMeeting.addEventListener("click", () => {
+    const url = upcomingEvent?.joinUrl;
+    if (!url) return;
+    void api.joinMeeting(url).then(() => api.hideCalendar());
+  });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -350,13 +425,14 @@ function startCalendar(api: DesktopApi): void {
   const applySettings = (next: AppSettings): void => {
     settings = next;
     applyTheme(next.theme);
+    paintEvent();
     refreshTray();
     render();
+    void refreshUpcoming();
   };
 
   void api.getSettings().then((next) => {
     applySettings(next);
-    refreshTray();
   });
   api.onSettingsChanged(applySettings);
   api.onClockTick(() => {
@@ -367,9 +443,11 @@ function startCalendar(api: DesktopApi): void {
     }
     refreshTray();
     render();
+    void refreshUpcoming();
   });
   api.onCalendarShown(() => {
     render({ focusGrid: true });
+    void refreshUpcoming();
   });
 }
 

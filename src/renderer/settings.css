@@ -205,6 +205,13 @@ body {
   border-top: 0.5px solid var(--line);
 }
 
+.calendar-access-status {
+  margin: -2px 16px 8px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .row.is-off {
   opacity: 0.4;
 }

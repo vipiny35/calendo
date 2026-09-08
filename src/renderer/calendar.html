@@ -30,6 +30,16 @@
           </div>
         </header>
 
+        <section class="event-card" id="event-card" hidden aria-labelledby="event-title">
+          <div class="event-heading">
+            <span class="event-dot" aria-hidden="true"></span>
+            <span class="event-status" id="event-status">No upcoming events</span>
+          </div>
+          <h2 id="event-title">Your calendar is clear</h2>
+          <p class="event-meta" id="event-meta">New events will appear here automatically.</p>
+          <button type="button" class="join-meeting" id="join-meeting" hidden></button>
+        </section>
+
         <div id="live" class="visually-hidden" aria-live="polite"></div>
         <div id="grid"></div>
 

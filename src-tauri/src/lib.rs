@@ -5,6 +5,7 @@
 
 mod glass;
 mod beep;
+mod events;
 mod settings;
 
 use settings::{AppSettings, SettingsStore};
@@ -28,6 +29,7 @@ const AUTOSTART_ARG: &str = "--autostart";
 const CALENDAR_WIDTH: f64 = 288.0;
 const CALENDAR_WIDTH_WEEKS: f64 = 312.0;
 const CALENDAR_HEIGHT: f64 = 348.0;
+const EVENT_CARD_HEIGHT: f64 = 96.0;
 const SETTINGS_WIDTH: f64 = 560.0;
 const SETTINGS_HEIGHT: f64 = 560.0;
 
@@ -113,14 +115,6 @@ fn set_launch_at_login(app: &AppHandle, enabled: bool) {
     };
 }
 
-fn show_week_numbers(app: &AppHandle) -> bool {
-    app.state::<AppState>()
-        .settings
-        .lock()
-        .map(|store| store.value().show_week_numbers)
-        .unwrap_or(false)
-}
-
 fn close_calendar(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
         let _ = window.hide();
@@ -153,10 +147,12 @@ enum PopoverPlacement {
     Above,
 }
 
-fn calendar_window_size(show_week_numbers: bool) -> (f64, f64) {
+fn calendar_window_size(show_week_numbers: bool, show_upcoming_event: bool) -> (f64, f64) {
     (
         calendar_width(show_week_numbers),
-        CALENDAR_HEIGHT + glass::CARET_HEIGHT,
+        CALENDAR_HEIGHT
+            + glass::CARET_HEIGHT
+            + if show_upcoming_event { EVENT_CARD_HEIGHT } else { 0.0 },
     )
 }
 
@@ -237,7 +233,15 @@ fn position_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
     let Some(window) = app.get_webview_window(CALENDAR_LABEL) else {
         return;
     };
-    let (width, height) = calendar_window_size(show_week_numbers(app));
+    let (width, height) = app
+        .state::<AppState>()
+        .settings
+        .lock()
+        .map(|store| {
+            let settings = store.value();
+            calendar_window_size(settings.show_week_numbers, settings.show_upcoming_event)
+        })
+        .unwrap_or_else(|_| calendar_window_size(false, false));
     let fallback_scale = window.scale_factor().unwrap_or(1.0);
     // Tray events already carry physical pixels, converted with the status
     // item's own scale. The hidden window often still sits on the primary
@@ -388,10 +392,20 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn build_calendar_window(app: &AppHandle) -> tauri::Result<()> {
+    let initial = app
+        .state::<AppState>()
+        .settings
+        .lock()
+        .map(|store| store.value())
+        .unwrap_or_default();
+    let (initial_width, initial_height) = calendar_window_size(
+        initial.show_week_numbers,
+        initial.show_upcoming_event,
+    );
     let window =
         WebviewWindowBuilder::new(app, CALENDAR_LABEL, WebviewUrl::App("calendar.html".into()))
             .title("Calendo")
-            .inner_size(CALENDAR_WIDTH, CALENDAR_HEIGHT + glass::CARET_HEIGHT)
+            .inner_size(initial_width, initial_height)
             .decorations(false)
             .transparent(true)
             .shadow(true)
@@ -495,10 +509,15 @@ fn update_settings(
     if saved.launch_at_login != previous.launch_at_login {
         set_launch_at_login(&app, saved.launch_at_login);
     }
-    if saved.show_week_numbers != previous.show_week_numbers {
+    if saved.show_week_numbers != previous.show_week_numbers
+        || saved.show_upcoming_event != previous.show_upcoming_event
+    {
         if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
             if window.is_visible().unwrap_or(false) {
-                let (width, height) = calendar_window_size(saved.show_week_numbers);
+                let (width, height) = calendar_window_size(
+                    saved.show_week_numbers,
+                    saved.show_upcoming_event,
+                );
                 let _ = window.set_size(Size::Logical(LogicalSize::new(width, height)));
             }
         }
@@ -528,12 +547,8 @@ fn set_tray_label(
             return;
         };
         // On macOS, set_title(None) leaves the previous native title intact.
-        // Explicitly clear it for every glyph style when leaving plain text.
-        let text = if style == "none" {
-            title.as_deref().unwrap_or("")
-        } else {
-            ""
-        };
+        // Always write an explicit value so event status text clears reliably.
+        let text = title.as_deref().unwrap_or("");
         let _ = tray.set_title(Some(text));
         let bytes: Option<&[u8]> = match style.as_str() {
             "none" => None,
@@ -583,6 +598,21 @@ fn open_settings(app: AppHandle) {
 #[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0);
+}
+
+#[tauri::command]
+fn get_upcoming_event() -> Result<Option<events::UpcomingEvent>, String> {
+    events::fetch_upcoming()
+}
+
+#[tauri::command]
+fn request_calendar_access() -> Result<bool, String> {
+    events::request_access_if_needed()
+}
+
+#[tauri::command]
+fn join_meeting(url: String) -> Result<(), String> {
+    events::open_meeting(&url)
 }
 
 #[tauri::command]
@@ -656,6 +686,9 @@ pub fn run() {
             quit_app,
             app_version,
             check_for_updates,
+            get_upcoming_event,
+            request_calendar_access,
+            join_meeting,
         ])
         .run(tauri::generate_context!())
         .expect("Calendo failed to start");

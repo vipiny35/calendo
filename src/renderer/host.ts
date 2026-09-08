@@ -1,4 +1,5 @@
 import type { AppSettings } from "../shared/settings";
+import type { UpcomingEvent } from "../shared/events";
 
 interface TauriGlobal {
   core: { invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> };
@@ -20,6 +21,9 @@ export type DesktopApi = {
     image: number[] | null,
   ) => Promise<void>;
   beep: () => Promise<void>;
+  getUpcomingEvent: () => Promise<UpcomingEvent | null>;
+  requestCalendarAccess: () => Promise<boolean>;
+  joinMeeting: (url: string) => Promise<void>;
   checkForUpdates: () => Promise<string>;
   hideCalendar: () => Promise<void>;
   setCalendarPinned: (pinned: boolean) => Promise<void>;
@@ -70,6 +74,9 @@ export const api: DesktopApi = {
   setTrayLabel: (title, iconDay, style, image) =>
     invoke<void>("set_tray_label", { title, iconDay, style, image }),
   beep: () => invoke<void>("beep"),
+  getUpcomingEvent: () => invoke<UpcomingEvent | null>("get_upcoming_event"),
+  requestCalendarAccess: () => invoke<boolean>("request_calendar_access"),
+  joinMeeting: (url) => invoke<void>("join_meeting", { url }),
   checkForUpdates: () => invoke<string>("check_for_updates"),
   hideCalendar: () => invoke<void>("hide_calendar"),
   setCalendarPinned: (pinned) => invoke<void>("set_calendar_pinned", { pinned }),

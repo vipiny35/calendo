@@ -25,6 +25,7 @@ describe("normalizeSettings", () => {
       highlightWeekdays: [1, 5],
       launchAtLogin: true,
       beepOnTheHour: true,
+      showUpcomingEvent: true,
       theme: "dark",
     });
     expect(result.menuBarIcon).toBe("framed");
@@ -35,6 +36,7 @@ describe("normalizeSettings", () => {
     expect(result.highlightWeekdays).toEqual([1, 5]);
     expect(result.launchAtLogin).toBe(true);
     expect(result.beepOnTheHour).toBe(true);
+    expect(result.showUpcomingEvent).toBe(true);
     expect(result.theme).toBe("dark");
   });
 

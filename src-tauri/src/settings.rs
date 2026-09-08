@@ -43,6 +43,7 @@ pub struct AppSettings {
     pub menu_bar_format: String,
     pub launch_at_login: bool,
     pub beep_on_the_hour: bool,
+    pub show_upcoming_event: bool,
     pub auto_update: bool,
     pub theme: String,
 }
@@ -60,6 +61,7 @@ impl Default for AppSettings {
             menu_bar_format: String::new(),
             launch_at_login: false,
             beep_on_the_hour: false,
+            show_upcoming_event: false,
             auto_update: true,
             theme: "system".into(),
         }
@@ -234,6 +236,14 @@ mod tests {
         let settings = input.normalize(&base);
         assert_eq!(settings.menu_bar_icon, "framed");
         assert!(settings.beep_on_the_hour);
+    }
+
+    #[test]
+    fn keeps_upcoming_event_preference() {
+        let base = AppSettings::default();
+        let mut input = base.clone();
+        input.show_upcoming_event = true;
+        assert!(input.normalize(&base).show_upcoming_event);
     }
 
     #[test]
