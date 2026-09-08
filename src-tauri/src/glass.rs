@@ -13,7 +13,7 @@ use objc2::runtime::{AnyObject, Bool};
 use objc2::{class, msg_send, sel};
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
 
-pub const CARET_HEIGHT: f64 = 14.0;
+pub const CARET_HEIGHT: f64 = 11.0;
 const CORNER_RADIUS: f64 = 12.0;
 const NS_VIEW_WIDTH_SIZABLE: usize = 2;
 const NS_VIEW_HEIGHT_SIZABLE: usize = 16;

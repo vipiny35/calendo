@@ -19,6 +19,7 @@ await Promise.all([
   cp("src/renderer/settings.html", "dist/renderer/settings.html"),
   cp("src/renderer/settings.css", "dist/renderer/settings.css"),
   cp("icons/tray", "dist/renderer/tray", { recursive: true }),
+  cp("icons/icon.png", "dist/renderer/icon.png"),
   bundle("src/renderer/calendar.ts", "dist/renderer/calendar.js"),
   bundle("src/renderer/settings.ts", "dist/renderer/settings.js"),
 ]);

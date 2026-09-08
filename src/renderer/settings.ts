@@ -104,7 +104,6 @@ function startSettings(api: DesktopApi): void {
   const beepPreview = requireElement<HTMLButtonElement>("beep-preview");
   const theme = requireElement<HTMLSelectElement>("theme");
   const version = requireElement<HTMLParagraphElement>("version");
-  const quit = requireElement<HTMLButtonElement>("quit");
   const checkUpdates = requireElement<HTMLButtonElement>("check-updates");
   const updateStatus = requireElement<HTMLParagraphElement>("update-status");
 
@@ -235,10 +234,6 @@ function startSettings(api: DesktopApi): void {
     void api.beep();
   });
 
-  quit.addEventListener("click", () => {
-    void api.quitApp();
-  });
-
   const checkForUpdates = async (): Promise<void> => {
     updateStatus.textContent = "Checking…";
     try {
@@ -247,8 +242,9 @@ function startSettings(api: DesktopApi): void {
       updateStatus.textContent = latest === current || latest === `v${current}`
         ? "Calendo is up to date."
         : `Update available: ${latest}`;
-    } catch {
-      updateStatus.textContent = "Could not check for updates.";
+    } catch (error) {
+      const detail = typeof error === "string" ? error : "Could not reach update server";
+      updateStatus.textContent = `Update check failed: ${detail}`;
     }
   };
   checkUpdates.addEventListener("click", () => void checkForUpdates());

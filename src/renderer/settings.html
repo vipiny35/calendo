@@ -9,6 +9,10 @@
   <body>
     <main class="page">
       <div class="tabs" id="tabs" role="tablist" aria-label="Settings">
+        <div class="brand" aria-hidden="true">
+          <img class="brand-icon" src="icon.png" alt="" />
+          <span>Calendo</span>
+        </div>
         <button
           type="button"
           role="tab"
@@ -52,14 +56,12 @@
             <div class="row">
               <div class="copy">
                 <label for="login">Launch at login</label>
-                <p>Start Calendo when you log in to this Mac.</p>
               </div>
               <input id="login" name="launchAtLogin" type="checkbox" />
             </div>
             <div class="row">
               <div class="copy">
                 <label for="beep">Beep beep on the hour</label>
-                <p>Play a sound when the clock strikes the hour.</p>
               </div>
               <div class="row-controls">
                 <button
@@ -74,7 +76,6 @@
             <div class="row">
               <div class="copy">
                 <label for="auto-update">Automatically check for updates</label>
-                <p>Check for new Calendo releases when Settings opens.</p>
               </div>
               <input id="auto-update" name="autoUpdate" type="checkbox" />
             </div>
@@ -159,14 +160,23 @@
           hidden
         >
           <div class="about">
+            <img class="about-icon" src="icon.png" alt="Calendo app icon" />
             <p class="about-name">Calendo</p>
             <p class="about-version" id="version">Calendo</p>
+            <p class="about-author">Created by Vipin Yadav</p>
+            <a
+              class="about-link"
+              href="https://vipinyadav.com"
+              target="_blank"
+              rel="noreferrer"
+            >
+              vipinyadav.com
+            </a>
             <p class="about-copy">
               A month calendar in the macOS menu bar. Nothing leaves this Mac.
             </p>
-            <button type="button" class="quit" id="check-updates">Check for Updates</button>
+            <button type="button" class="action" id="check-updates">Check for Updates</button>
             <p class="about-version" id="update-status" aria-live="polite"></p>
-            <button type="button" class="quit" id="quit">Quit Calendo</button>
           </div>
         </section>
       </form>
