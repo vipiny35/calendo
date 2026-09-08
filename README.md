@@ -12,11 +12,11 @@ Click the date in the menu bar to open this month. Move between months, jump
 back to today, and close it by clicking outside or pressing Escape. Right-click
 the menu bar item, or the cog in the popover, for Settings.
 
-The menu bar item can be a filled date, a date inside a rounded outline, or the
-date alone. The outlined and plain styles can add the weekday and the month.
-Settings control that pairing, which day the week starts on, week numbers,
-highlighted weekdays, appearance, an hourly chime, and whether Calendo opens
-at login.
+The menu bar item can be a filled date, a date inside a rounded outline, a
+calendar, or the date alone. Every style but the filled one can add the weekday
+and the month. Settings control that pairing, which day the week starts on,
+week numbers, highlighted weekdays, appearance, an hourly chime, and whether
+Calendo opens at login.
 
 ## Install
 

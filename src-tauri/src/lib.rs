@@ -65,6 +65,8 @@ const TRAY_FILLED: [&[u8]; 31] = [
     include_bytes!("../../icons/tray/filled/day-31.png"),
 ];
 
+const TRAY_CALENDAR: &[u8] = include_bytes!("../../icons/tray/calendar.png");
+
 struct AppState {
     settings: Mutex<SettingsStore>,
     ignore_calendar_blur: AtomicBool,
@@ -528,6 +530,7 @@ fn set_tray_label(
         let bytes: Option<&[u8]> = match style.as_str() {
             "none" => None,
             "framed" => image.as_deref(),
+            "calendar" => Some(TRAY_CALENDAR),
             _ => icon_day
                 .filter(|day| (1..=31).contains(day))
                 .and_then(|day| TRAY_FILLED.get(usize::from(day) - 1).copied()),

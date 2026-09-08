@@ -21,9 +21,10 @@ accessory: look in the menu bar, not the Dock.
 `pnpm dmg` produces a disk image under `src-tauri/target/release/bundle/dmg`.
 
 `pnpm icon` regenerates `icons/icon.png`, `icons/icon.icns`,
-`icons/tray-icon.png`, and `icons/tray/filled/day-01.png` through `day-31.png`
-from `scripts/generate-icon.swift`. The framed menu bar glyph holds text, so
-the renderer draws it at runtime in `src/renderer/tray-frame.ts`.
+`icons/tray-icon.png`, `icons/tray/calendar.png`, and
+`icons/tray/filled/day-01.png` through `day-31.png` from
+`scripts/generate-icon.swift`. The framed menu bar glyph holds text, so the
+renderer draws it at runtime in `src/renderer/tray-frame.ts`.
 
 ## Tests
 

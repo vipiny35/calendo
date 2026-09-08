@@ -44,6 +44,7 @@ function fillSelect(
 function trayGlyphUrl(style: MenuBarIconStyle, date: Date): string | null {
   if (style === "none") return null;
   if (style === "framed") return framedGlyphMask(String(date.getDate()));
+  if (style === "calendar") return `url("tray/calendar.png")`;
   const day = String(date.getDate()).padStart(2, "0");
   return `url("tray/filled/day-${day}.png")`;
 }

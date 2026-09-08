@@ -244,6 +244,57 @@ func trayFilled(day: Int?) -> NSImage {
     }
 }
 
+/// Undated outline with a quiet grid, so the glyph still reads as a month.
+func trayCalendar() -> NSImage {
+    let m = trayMetrics()
+    return NSImage(size: NSSize(width: m.box, height: m.box), flipped: true) { _ in
+        NSColor.clear.setFill()
+        NSRect(x: 0, y: 0, width: m.box, height: m.box).fill()
+
+        let card = NSRect(
+            x: m.card.minX + m.stroke / 2,
+            y: m.card.minY + m.stroke / 2,
+            width: m.card.width - m.stroke,
+            height: m.card.height - m.stroke
+        )
+        NSColor.black.setStroke()
+        let outline = roundedRect(card, radius: m.radius - m.stroke / 2)
+        outline.lineWidth = m.stroke
+        outline.stroke()
+
+        let ruleY = m.card.minY + 3.6 * m.scale
+        let rule = NSBezierPath()
+        rule.move(to: NSPoint(x: card.minX - m.stroke / 2, y: ruleY))
+        rule.line(to: NSPoint(x: card.maxX + m.stroke / 2, y: ruleY))
+        rule.lineWidth = m.stroke
+        rule.stroke()
+
+        let padX = 1.55 * m.scale
+        let padTop = 1.35 * m.scale
+        let padBottom = 1.75 * m.scale
+        let inner = NSRect(
+            x: card.minX + m.stroke / 2 + padX,
+            y: ruleY + m.stroke / 2 + padTop,
+            width: card.width - m.stroke - padX * 2,
+            height: card.maxY - ruleY - m.stroke - padTop - padBottom
+        )
+        let cols = 3
+        let rows = 2
+        let cellW = inner.width / CGFloat(cols)
+        let cellH = inner.height / CGFloat(rows)
+        let dot = min(cellW, cellH) * 0.48
+        for row in 0..<rows {
+            for col in 0..<cols {
+                let x = inner.minX + (CGFloat(col) + 0.5) * cellW - dot / 2
+                let y = inner.minY + (CGFloat(row) + 0.5) * cellH - dot / 2
+                NSColor.black.withAlphaComponent(row == 0 && col == 0 ? 1 : 0.4).setFill()
+                roundedRect(NSRect(x: x, y: y, width: dot, height: dot), radius: dot * 0.3).fill()
+            }
+        }
+        return true
+    }
+}
+
 let appIcon = drawAppIcon()
 try pngData(appIcon, pixels: 1024).write(to: icons.appendingPathComponent("icon.png"))
 
@@ -254,6 +305,7 @@ let filledDir = trayDir.appendingPathComponent("filled")
 try FileManager.default.createDirectory(at: filledDir, withIntermediateDirectories: true)
 
 try pngAtSize(trayFilled(day: nil)).write(to: icons.appendingPathComponent("tray-icon.png"))
+try pngAtSize(trayCalendar()).write(to: trayDir.appendingPathComponent("calendar.png"))
 for day in 1...31 {
     let name = String(format: "day-%02d.png", day)
     try pngAtSize(trayFilled(day: day)).write(to: filledDir.appendingPathComponent(name))

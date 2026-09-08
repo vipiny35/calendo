@@ -1,7 +1,7 @@
 export type WeekStartsOn = Weekday;
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type Theme = "system" | "light" | "dark";
-export type MenuBarIconStyle = "filled" | "framed" | "none";
+export type MenuBarIconStyle = "filled" | "framed" | "calendar" | "none";
 
 export type AppSettings = {
   menuBarIcon: MenuBarIconStyle;
@@ -20,6 +20,7 @@ export type MenuBarPart = "weekday" | "day" | "month";
 export const MENU_BAR_ICONS: { id: MenuBarIconStyle; label: string }[] = [
   { id: "filled", label: "Filled date" },
   { id: "framed", label: "Framed date" },
+  { id: "calendar", label: "Calendar" },
   { id: "none", label: "Date only" },
 ];
 
@@ -32,7 +33,6 @@ const PART_OPTIONS: Record<MenuBarPart, Intl.DateTimeFormatOptions> = {
 /** Styles that no longer exist, mapped to the nearest one that does. */
 const RETIRED_ICONS: Record<string, MenuBarIconStyle> = {
   outline: "framed",
-  calendar: "framed",
 };
 
 /**

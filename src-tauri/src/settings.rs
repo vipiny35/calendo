@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-const MENU_BAR_ICONS: [&str; 3] = ["filled", "framed", "none"];
+const MENU_BAR_ICONS: [&str; 4] = ["filled", "framed", "calendar", "none"];
 
 /// Styles that no longer exist, mapped to the nearest one that does.
-const RETIRED_ICONS: [(&str, &str); 2] = [("outline", "framed"), ("calendar", "framed")];
+const RETIRED_ICONS: [(&str, &str); 1] = [("outline", "framed")];
 
 /// Formats written before icon style and weekday/month toggles.
 const LEGACY_FORMATS: [(&str, &str, bool, bool); 11] = [
@@ -208,13 +208,19 @@ mod tests {
     }
 
     #[test]
-    fn migrates_the_retired_glyphs_to_the_framed_date() {
+    fn migrates_the_retired_outline_glyph_to_the_framed_date() {
         let base = AppSettings::default();
-        for retired in ["outline", "calendar"] {
-            let mut input = base.clone();
-            input.menu_bar_icon = retired.into();
-            assert_eq!(input.normalize(&base).menu_bar_icon, "framed");
-        }
+        let mut input = base.clone();
+        input.menu_bar_icon = "outline".into();
+        assert_eq!(input.normalize(&base).menu_bar_icon, "framed");
+    }
+
+    #[test]
+    fn keeps_the_undated_calendar_glyph() {
+        let base = AppSettings::default();
+        let mut input = base.clone();
+        input.menu_bar_icon = "calendar".into();
+        assert_eq!(input.normalize(&base).menu_bar_icon, "calendar");
     }
 
     #[test]

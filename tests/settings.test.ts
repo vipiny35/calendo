@@ -54,9 +54,12 @@ describe("normalizeSettings", () => {
     );
   });
 
-  it("migrates the retired glyphs to the framed date", () => {
+  it("migrates the retired outline glyph to the framed date", () => {
     expect(normalizeSettings({ menuBarIcon: "outline" }).menuBarIcon).toBe("framed");
-    expect(normalizeSettings({ menuBarIcon: "calendar" }).menuBarIcon).toBe("framed");
+  });
+
+  it("keeps the undated calendar glyph", () => {
+    expect(normalizeSettings({ menuBarIcon: "calendar" }).menuBarIcon).toBe("calendar");
   });
 
   it("rejects values the interface does not offer", () => {
