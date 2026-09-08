@@ -1,22 +1,21 @@
 /*
- * Calendar popover.
- *
- * The window is a native glass panel. This page must stay transparent so that
- * material shows through; paint only type, the today fill, and a hairline.
+ * Calendar popover. Native popover material sits behind a light or dark card;
+ * this page draws the caret, type, the month outline, and weekday bands.
  */
 :root {
-  --ink: #1d1d1f;
+  --paper: #ffffff;
+  --ink: #1c1c1e;
+  --ink-dim: #c5c7cc;
   --ink-soft: #6e6e73;
-  --ink-faint: #86868b;
   --fill: rgb(0 0 0 / 6%);
   --fill-strong: rgb(0 0 0 / 10%);
-  --rim: rgb(0 0 0 / 14%);
+  --month-stroke: rgb(0 0 0 / 22%);
+  --column-fill: rgb(0 0 0 / 6%);
+  --rim: rgb(0 0 0 / 12%);
   --accent: Highlight;
-  --accent-ink: HighlightText;
-  --today-fallback: #007aff;
+  --caret-x: 50%;
+  --caret-size: 14px;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
-    sans-serif;
-  --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue",
     sans-serif;
 
   color: var(--ink);
@@ -28,23 +27,42 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --paper: #2c2c2e;
     --ink: #f5f5f7;
+    --ink-dim: #636366;
     --ink-soft: #a1a1a6;
-    --ink-faint: #86868b;
-    --fill: rgb(255 255 255 / 10%);
-    --fill-strong: rgb(255 255 255 / 16%);
-    --rim: rgb(255 255 255 / 22%);
+    --fill: rgb(255 255 255 / 8%);
+    --fill-strong: rgb(255 255 255 / 14%);
+    --month-stroke: rgb(255 255 255 / 28%);
+    --column-fill: rgb(255 255 255 / 7%);
+    --rim: rgb(255 255 255 / 12%);
     color-scheme: dark;
   }
 }
 
+:root[data-theme="light"] {
+  --paper: #ffffff;
+  --ink: #1c1c1e;
+  --ink-dim: #c5c7cc;
+  --ink-soft: #6e6e73;
+  --fill: rgb(0 0 0 / 6%);
+  --fill-strong: rgb(0 0 0 / 10%);
+  --month-stroke: rgb(0 0 0 / 22%);
+  --column-fill: rgb(0 0 0 / 6%);
+  --rim: rgb(0 0 0 / 12%);
+  color-scheme: light;
+}
+
 :root[data-theme="dark"] {
+  --paper: #2c2c2e;
   --ink: #f5f5f7;
+  --ink-dim: #636366;
   --ink-soft: #a1a1a6;
-  --ink-faint: #86868b;
-  --fill: rgb(255 255 255 / 10%);
-  --fill-strong: rgb(255 255 255 / 16%);
-  --rim: rgb(255 255 255 / 22%);
+  --fill: rgb(255 255 255 / 8%);
+  --fill-strong: rgb(255 255 255 / 14%);
+  --month-stroke: rgb(255 255 255 / 28%);
+  --column-fill: rgb(255 255 255 / 7%);
+  --rim: rgb(255 255 255 / 12%);
   color-scheme: dark;
 }
 
@@ -74,70 +92,138 @@ body {
 
 .shell {
   height: 100%;
-  padding: 0;
+  padding-top: var(--caret-size);
+}
+
+.shell[data-placement="above"] {
+  padding-top: 0;
+  padding-bottom: var(--caret-size);
 }
 
 .popover {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 12px 12px 10px;
-  border: 0;
-  border-radius: 16px;
-  background: transparent;
+  border-radius: 12px;
+  background: var(--paper);
   box-shadow: inset 0 0 0 0.5px var(--rim);
+  color: var(--ink);
+}
+
+.caret {
+  position: absolute;
+  top: calc(var(--caret-size) * -1 + 1px);
+  left: var(--caret-x);
+  width: 20px;
+  height: var(--caret-size);
+  transform: translateX(-50%);
+  background: var(--paper);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  pointer-events: none;
+}
+
+.shell[data-placement="above"] .caret {
+  top: auto;
+  bottom: calc(var(--caret-size) * -1 + 1px);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
 
 .header {
-  display: grid;
-  grid-template-columns: 28px 1fr 28px;
-  gap: 4px;
+  display: flex;
   align-items: center;
-  padding: 0 2px 6px;
+  justify-content: space-between;
+  padding: 14px 14px 10px;
 }
 
 .header h1 {
   margin: 0;
   color: var(--ink);
-  font-family: var(--display);
-  font-size: 15px;
-  font-weight: 590;
+  font-size: 17px;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  text-align: center;
-  line-height: 1.2;
+  line-height: 1;
 }
 
-.icon-button,
-.today {
+.nav {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
+  height: 32px;
   margin: 0;
+  padding: 0;
   border: 0;
+  border-radius: 8px;
   background: transparent;
-  color: inherit;
+  color: var(--ink);
   font: inherit;
   cursor: default;
 }
 
-.icon-button {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  color: var(--ink);
+.icon-button svg {
+  display: block;
+  width: 18px;
+  height: 18px;
 }
 
-.icon-button:hover,
-.today:hover {
+.footer .icon-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-button:hover {
   background: var(--fill);
 }
 
-.icon-button:active,
-.today:active {
+.icon-button:active {
   background: var(--fill-strong);
 }
 
+#grid {
+  padding: 0 10px 2px;
+}
+
+.month {
+  position: relative;
+}
+
+.column-highlights {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.column-highlight {
+  position: absolute;
+  border-radius: 8px;
+  background: var(--column-fill);
+}
+
+.month-outline {
+  position: absolute;
+  z-index: 2;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.month-outline path {
+  fill: none;
+  stroke: var(--month-stroke);
+  stroke-width: 1;
+}
+
 .grid {
+  position: relative;
+  z-index: 1;
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
@@ -152,7 +238,6 @@ body {
   padding: 0;
   text-align: center;
   vertical-align: middle;
-  font-weight: 500;
 }
 
 .grid.with-weeks th:first-child,
@@ -162,57 +247,72 @@ body {
 
 .weekday,
 .weeknum {
-  height: 22px;
-  color: var(--ink-faint);
+  height: 20px;
+  padding-bottom: 2px;
+  color: var(--ink-soft);
   font-size: 11px;
-  font-weight: 590;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 16px;
 }
 
 .weeknum {
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
   letter-spacing: 0;
+}
+
+.grid tbody td {
+  height: 36px;
+}
+
+.grid tbody .weeknum {
+  height: 36px;
+  line-height: 36px;
 }
 
 .day {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  margin: 0 auto;
+  width: 100%;
+  height: 36px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: 8px;
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
   cursor: default;
 }
 
-.day.is-outside {
-  color: color-mix(in srgb, var(--ink) 38%, transparent);
+.day-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
 }
 
-.day.is-weekend.is-in-month {
-  color: var(--ink-soft);
-}
-
-.day.is-today {
-  background: var(--accent, var(--today-fallback));
-  color: var(--accent-ink, #fff);
+.day.is-outside .day-number {
+  color: var(--ink-dim);
   font-weight: 600;
 }
 
-.day.is-today.is-outside {
-  color: var(--accent-ink, #fff);
+.day.is-today .day-number {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
-.day:hover:not(.is-today) {
+.day.is-selected:not(.is-today) .day-number {
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+.day:hover:not(.is-today):not(.is-selected) .day-number {
   background: var(--fill);
 }
 
@@ -220,33 +320,19 @@ body {
   outline: none;
 }
 
-.day:focus-visible:not(.is-today) {
-  box-shadow: inset 0 0 0 2px var(--accent, var(--today-fallback));
-}
-
-.day.is-today:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--today-fallback)) 40%, transparent);
+.day:focus-visible:not(.is-today):not(.is-selected) .day-number {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 .footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 2px 0;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding: 6px 12px 12px;
 }
 
-.today {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 8px;
-  color: var(--accent, var(--today-fallback));
-  font-size: 13px;
-  font-weight: 590;
-}
-
-.icon-button:focus-visible,
-.today:focus-visible {
-  outline: 2px solid var(--accent, var(--today-fallback));
+.icon-button:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

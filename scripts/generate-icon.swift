@@ -134,39 +134,130 @@ func pngData(_ image: NSImage, pixels: Int) -> Data {
     }
 }
 
-func trayPng() -> Data {
-    let pixels = 44
-    return rasterize(pixels: pixels) { ctx in
-        let inset: CGFloat = 5
-        let card = CGRect(
-            x: inset,
-            y: inset + 1,
-            width: CGFloat(pixels) - inset * 2,
-            height: CGFloat(pixels) - inset * 2 - 2
+/// Writes an image as PNG at its own size, with no flip. The glyph is drawn
+/// top-down in a flipped context, so it must not go through `pngData`, which
+/// flips again on the way out.
+func pngAtSize(_ image: NSImage) -> Data {
+    guard let tiff = image.tiffRepresentation,
+          let rep = NSBitmapImageRep(data: tiff),
+          let data = rep.representation(using: .png, properties: [:]) else {
+        fatalError("Could not encode PNG")
+    }
+    return data
+}
+
+/// Inner window of the calendar: square against the header, rounded at the
+/// bottom so it follows the outer squircle.
+func bodyHole(_ rect: NSRect, radius: CGFloat) -> NSBezierPath {
+    let corner = min(radius, rect.width / 2, rect.height / 2)
+    let path = NSBezierPath()
+    path.move(to: NSPoint(x: rect.minX, y: rect.minY))
+    path.line(to: NSPoint(x: rect.maxX, y: rect.minY))
+    path.line(to: NSPoint(x: rect.maxX, y: rect.maxY - corner))
+    path.appendArc(
+        withCenter: NSPoint(x: rect.maxX - corner, y: rect.maxY - corner),
+        radius: corner,
+        startAngle: 0,
+        endAngle: 90
+    )
+    path.line(to: NSPoint(x: rect.minX + corner, y: rect.maxY))
+    path.appendArc(
+        withCenter: NSPoint(x: rect.minX + corner, y: rect.maxY - corner),
+        radius: corner,
+        startAngle: 90,
+        endAngle: 180
+    )
+    path.close()
+    return path
+}
+
+struct TrayMetrics {
+    let box: CGFloat
+    let scale: CGFloat
+    let stroke: CGFloat
+    let side: CGFloat
+    let inset: CGFloat
+    let radius: CGFloat
+    let header: CGFloat
+    let card: NSRect
+}
+
+func trayMetrics() -> TrayMetrics {
+    let box = 32.0
+    let scale = 2.0
+    let stroke = 1.65 * scale
+    let side = 15.0 * scale
+    let inset = (box - side) / 2
+    let radius = 3.7 * scale
+    let header = 4.35 * scale
+    return TrayMetrics(
+        box: box,
+        scale: scale,
+        stroke: stroke,
+        side: side,
+        inset: inset,
+        radius: radius,
+        header: header,
+        card: NSRect(x: inset, y: inset, width: side, height: side)
+    )
+}
+
+func drawDayNumber(_ day: Int, in hole: NSRect, scale: CGFloat) {
+    let text = "\(day)" as NSString
+    let fontSize = (day >= 10 ? 7.0 : 9.4) * scale
+    let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .medium)
+    let attributes: [NSAttributedString.Key: Any] = [
+        .font: font,
+        .foregroundColor: NSColor.black,
+    ]
+    let size = text.size(withAttributes: attributes)
+    text.draw(
+        at: NSPoint(
+            x: hole.midX - size.width / 2,
+            y: hole.midY - size.height / 2 - 0.35 * scale
+        ),
+        withAttributes: attributes
+    )
+}
+
+/// Filled rounded calendar with a header bar and the day in the window.
+func trayFilled(day: Int?) -> NSImage {
+    let m = trayMetrics()
+    return NSImage(size: NSSize(width: m.box, height: m.box), flipped: true) { _ in
+        NSColor.clear.setFill()
+        NSRect(x: 0, y: 0, width: m.box, height: m.box).fill()
+
+        let hole = NSRect(
+            x: m.card.minX + m.stroke,
+            y: m.card.minY + m.header,
+            width: m.card.width - m.stroke * 2,
+            height: m.card.height - m.header - m.stroke
         )
-        ctx.setStrokeColor(NSColor.black.cgColor)
-        ctx.setLineWidth(2)
-        ctx.setLineJoin(.round)
-        ctx.setLineCap(.round)
-        ctx.addPath(CGPath(roundedRect: card, cornerWidth: 6, cornerHeight: 6, transform: nil))
-        ctx.strokePath()
-
-        let headerY = card.maxY - 11
-        ctx.move(to: CGPoint(x: card.minX, y: headerY))
-        ctx.addLine(to: CGPoint(x: card.maxX, y: headerY))
-        ctx.strokePath()
-
-        for x in [card.minX + 8, card.midX, card.maxX - 8] {
-            ctx.move(to: CGPoint(x: x, y: card.maxY + 1))
-            ctx.addLine(to: CGPoint(x: x, y: card.maxY - 5))
-            ctx.strokePath()
-        }
+        let shape = NSBezierPath()
+        shape.append(roundedRect(m.card, radius: m.radius))
+        shape.append(bodyHole(hole, radius: max(m.radius - m.stroke, 1.2 * m.scale)))
+        shape.windingRule = .evenOdd
+        NSColor.black.setFill()
+        shape.fill()
+        if let day { drawDayNumber(day, in: hole, scale: m.scale) }
+        return true
     }
 }
 
 let appIcon = drawAppIcon()
 try pngData(appIcon, pixels: 1024).write(to: icons.appendingPathComponent("icon.png"))
-try trayPng().write(to: icons.appendingPathComponent("tray-icon.png"))
+
+let trayDir = icons.appendingPathComponent("tray")
+try? FileManager.default.removeItem(at: trayDir)
+try FileManager.default.createDirectory(at: trayDir, withIntermediateDirectories: true)
+let filledDir = trayDir.appendingPathComponent("filled")
+try FileManager.default.createDirectory(at: filledDir, withIntermediateDirectories: true)
+
+try pngAtSize(trayFilled(day: nil)).write(to: icons.appendingPathComponent("tray-icon.png"))
+for day in 1...31 {
+    let name = String(format: "day-%02d.png", day)
+    try pngAtSize(trayFilled(day: day)).write(to: filledDir.appendingPathComponent(name))
+}
 
 let iconset = icons.appendingPathComponent("Calendo.iconset")
 try? FileManager.default.removeItem(at: iconset)

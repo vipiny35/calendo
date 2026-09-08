@@ -85,7 +85,7 @@ export function weekdayIndex(date: Date, weekStartsOn: WeekStartsOn): number {
 
 export function monthTitle(year: number, month: number, locale?: string): string {
   return new Intl.DateTimeFormat(locale, {
-    month: "long",
+    month: "short",
     year: "numeric",
   }).format(atNoon(year, month, 1));
 }

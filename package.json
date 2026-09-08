@@ -21,5 +21,8 @@
     "esbuild": "^0.28.2",
     "typescript": "^5.9.3",
     "vitest": "^5.0.0"
+  },
+  "dependencies": {
+    "lucide": "^1.43.0"
   }
 }

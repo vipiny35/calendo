@@ -54,6 +54,15 @@ describe("month grid", () => {
     expect(sunday.weekdayLabels[0]?.long).toMatch(/sunday/i);
     const monday = buildMonth(2026, 8, 1, atNoon(2026, 8, 8), "en-US");
     expect(monday.weekdayLabels[0]?.long).toMatch(/monday/i);
+    expect(monday.weekdayLabels.map((label) => label.narrow)).toEqual([
+      "M",
+      "T",
+      "W",
+      "T",
+      "F",
+      "S",
+      "S",
+    ]);
   });
 });
 

@@ -1,4 +1,4 @@
-import { cp, mkdir } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 import { build } from "esbuild";
 
 const bundle = (entry, outfile) =>
@@ -12,11 +12,13 @@ const bundle = (entry, outfile) =>
   });
 
 await mkdir("dist/renderer", { recursive: true });
+await rm("dist/renderer/tray", { recursive: true, force: true });
 await Promise.all([
   cp("src/renderer/calendar.html", "dist/renderer/calendar.html"),
   cp("src/renderer/calendar.css", "dist/renderer/calendar.css"),
   cp("src/renderer/settings.html", "dist/renderer/settings.html"),
   cp("src/renderer/settings.css", "dist/renderer/settings.css"),
+  cp("icons/tray", "dist/renderer/tray", { recursive: true }),
   bundle("src/renderer/calendar.ts", "dist/renderer/calendar.js"),
   bundle("src/renderer/settings.ts", "dist/renderer/settings.js"),
 ]);

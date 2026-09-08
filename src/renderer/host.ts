@@ -13,8 +13,15 @@ interface TauriGlobal {
 export type DesktopApi = {
   getSettings: () => Promise<AppSettings>;
   updateSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>;
-  setTrayTitle: (title: string) => Promise<void>;
+  setTrayLabel: (
+    title: string | null,
+    iconDay: number | null,
+    style: AppSettings["menuBarIcon"],
+    image: number[] | null,
+  ) => Promise<void>;
+  beep: () => Promise<void>;
   hideCalendar: () => Promise<void>;
+  setCalendarPinned: (pinned: boolean) => Promise<void>;
   openSettings: () => Promise<void>;
   quitApp: () => Promise<void>;
   getAppVersion: () => Promise<string>;
@@ -59,8 +66,11 @@ function subscribe<T>(event: string, handler: (payload: T) => void): () => void 
 export const api: DesktopApi = {
   getSettings: () => invoke<AppSettings>("get_settings"),
   updateSettings: (patch) => invoke<AppSettings>("update_settings", { patch }),
-  setTrayTitle: (title) => invoke<void>("set_tray_title", { title }),
+  setTrayLabel: (title, iconDay, style, image) =>
+    invoke<void>("set_tray_label", { title, iconDay, style, image }),
+  beep: () => invoke<void>("beep"),
   hideCalendar: () => invoke<void>("hide_calendar"),
+  setCalendarPinned: (pinned) => invoke<void>("set_calendar_pinned", { pinned }),
   openSettings: () => invoke<void>("open_settings"),
   quitApp: () => invoke<void>("quit_app"),
   getAppVersion: () => invoke<string>("app_version"),

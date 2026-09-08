@@ -6,9 +6,18 @@ import {
   dayName,
   fromIso,
   toIso,
+  type CalendarMonth,
 } from "../shared/calendar";
-import { formatMenuBarDate, type AppSettings } from "../shared/settings";
+import {
+  MONTH_OUTLINE_RADIUS,
+  monthOutlinePath,
+  occupancyFromWeeks,
+} from "../shared/month-outline";
+import { menuBarLabel, highlightedColumnRuns, type AppSettings } from "../shared/settings";
+import { lucideIcon } from "./icons";
+import { framedGlyphPng } from "./tray-frame";
 import { installTauriBridge, type DesktopApi } from "./host";
+import { ChevronLeft, ChevronRight, CircleDot, Settings } from "lucide";
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -25,26 +34,111 @@ function announce(message: string): void {
   requireElement("live").textContent = message;
 }
 
+function paintMonthOutline(
+  table: HTMLTableElement,
+  svg: SVGSVGElement,
+  month: CalendarMonth,
+  settings: AppSettings,
+): void {
+  const path = svg.querySelector("path");
+  const firstCell = table.querySelector<HTMLElement>("tbody td");
+  const firstRow = table.querySelector<HTMLElement>("tbody tr");
+  if (!path || !firstCell || !firstRow) return;
+  const wrap = svg.parentElement;
+  if (!wrap) return;
+  const wrapRect = wrap.getBoundingClientRect();
+  const cellRect = firstCell.getBoundingClientRect();
+  const rowRect = firstRow.getBoundingClientRect();
+  if (cellRect.width === 0 || rowRect.height === 0) return;
+  const rows = month.weeks.length;
+  const cols = month.weeks[0]?.length ?? 0;
+  svg.setAttribute("width", String(cols * cellRect.width));
+  svg.setAttribute("height", String(rows * rowRect.height));
+  svg.style.left = `${cellRect.left - wrapRect.left}px`;
+  svg.style.top = `${cellRect.top - wrapRect.top}px`;
+  path.setAttribute(
+    "d",
+    monthOutlinePath(
+      occupancyFromWeeks(month.weeks),
+      cellRect.width,
+      rowRect.height,
+      MONTH_OUTLINE_RADIUS,
+    ),
+  );
+  paintColumnHighlights(table, wrap, settings);
+}
+
+function paintColumnHighlights(
+  table: HTMLTableElement,
+  wrap: HTMLElement,
+  settings: AppSettings,
+): void {
+  const layer = wrap.querySelector(".column-highlights");
+  const headers = Array.from(
+    table.querySelectorAll<HTMLElement>("thead th.weekday"),
+  );
+  const firstBody = table.querySelector<HTMLElement>("tbody tr");
+  const lastRow = table.querySelector<HTMLElement>("tbody tr:last-child");
+  if (!layer || headers.length < 7 || !firstBody || !lastRow) return;
+  const wrapRect = wrap.getBoundingClientRect();
+  const top = firstBody.getBoundingClientRect().top - wrapRect.top;
+  const bottom = lastRow.getBoundingClientRect().bottom - wrapRect.top;
+  const inset = 2;
+  layer.replaceChildren(
+    ...highlightedColumnRuns(settings.weekStartsOn, settings.highlightWeekdays).flatMap(
+      (run) => {
+        const start = headers[run.start];
+        const end = headers[run.start + run.count - 1];
+        if (!start || !end) return [];
+        const startRect = start.getBoundingClientRect();
+        const endRect = end.getBoundingClientRect();
+        const band = document.createElement("div");
+        band.className = "column-highlight";
+        band.style.left = `${startRect.left - wrapRect.left + inset}px`;
+        band.style.width = `${Math.max(0, endRect.right - startRect.left - inset * 2)}px`;
+        band.style.top = `${top}px`;
+        band.style.height = `${Math.max(0, bottom - top)}px`;
+        return [band];
+      },
+    ),
+  );
+}
+
 function startCalendar(api: DesktopApi): void {
   const monthLabel = requireElement<HTMLHeadingElement>("month-label");
   const grid = requireElement<HTMLDivElement>("grid");
   const prev = requireElement<HTMLButtonElement>("prev-month");
+  const todayButton = requireElement<HTMLButtonElement>("today-month");
   const next = requireElement<HTMLButtonElement>("next-month");
-  const todayButton = requireElement<HTMLButtonElement>("today");
   const settingsButton = requireElement<HTMLButtonElement>("settings");
+  prev.append(lucideIcon(ChevronLeft, 18));
+  todayButton.append(lucideIcon(CircleDot, 18));
+  next.append(lucideIcon(ChevronRight, 18));
+  settingsButton.append(lucideIcon(Settings, 16));
 
   let settings: AppSettings | null = null;
   let viewYear = new Date().getFullYear();
   let viewMonth = new Date().getMonth();
   let focusIso = toIso(new Date());
-  let lastTrayTitle = "";
+  let lastTrayLabel = "";
+  let lastHour = new Date().getHours();
 
   const refreshTray = (): void => {
     if (!settings) return;
-    const title = formatMenuBarDate(new Date(), settings.menuBarFormat);
-    if (title === lastTrayTitle) return;
-    lastTrayTitle = title;
-    void api.setTrayTitle(title);
+    const now = new Date();
+    const label = menuBarLabel(settings, now);
+    const signature = `${label.text ?? ""}|${label.day ?? ""}|${label.style}`;
+    if (signature === lastTrayLabel) return;
+    lastTrayLabel = signature;
+    // The framed style draws its own glyph, so its date goes inside the
+    // outline rather than beside it.
+    const framed = label.style === "framed" ? label.text : null;
+    void api.setTrayLabel(
+      framed === null ? label.text : null,
+      label.day,
+      label.style,
+      framed === null ? null : framedGlyphPng(framed),
+    );
   };
 
   const render = (opts?: { announceMonth?: boolean; focusGrid?: boolean }): void => {
@@ -108,16 +202,19 @@ function startCalendar(api: DesktopApi): void {
         button.type = "button";
         button.className = "day";
         button.dataset.iso = day.iso;
-        button.textContent = String(day.day);
+        const number = document.createElement("span");
+        number.className = "day-number";
+        number.textContent = String(day.day);
+        button.append(number);
         button.setAttribute("aria-label", dayName(fromIso(day.iso)));
         if (day.inMonth) button.classList.add("is-in-month");
         else button.classList.add("is-outside");
-        if (day.isWeekend && settings.dimWeekends) button.classList.add("is-weekend");
         if (day.isToday) {
           button.classList.add("is-today");
           button.setAttribute("aria-current", "date");
         }
         const focused = day.iso === focusIso;
+        if (focused) button.classList.add("is-selected");
         button.tabIndex = focused ? 0 : -1;
         button.setAttribute("aria-selected", focused ? "true" : "false");
         button.addEventListener("click", () => {
@@ -134,7 +231,19 @@ function startCalendar(api: DesktopApi): void {
       body.append(row);
     }
     table.append(body);
-    grid.replaceChildren(table);
+
+    const wrap = document.createElement("div");
+    wrap.className = "month";
+    const bands = document.createElement("div");
+    bands.className = "column-highlights";
+    bands.setAttribute("aria-hidden", "true");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "month-outline");
+    svg.setAttribute("aria-hidden", "true");
+    svg.append(document.createElementNS("http://www.w3.org/2000/svg", "path"));
+    wrap.append(bands, table, svg);
+    grid.replaceChildren(wrap);
+    paintMonthOutline(table, svg, month, settings);
 
     if (opts?.announceMonth) announce(month.label);
     if (opts?.focusGrid) {
@@ -173,8 +282,8 @@ function startCalendar(api: DesktopApi): void {
   };
 
   prev.addEventListener("click", () => shiftMonth(-1));
-  next.addEventListener("click", () => shiftMonth(1));
   todayButton.addEventListener("click", () => showToday());
+  next.addEventListener("click", () => shiftMonth(1));
   settingsButton.addEventListener("click", () => {
     void api.openSettings();
   });
@@ -252,6 +361,11 @@ function startCalendar(api: DesktopApi): void {
   });
   api.onSettingsChanged(applySettings);
   api.onClockTick(() => {
+    const hour = new Date().getHours();
+    if (hour !== lastHour) {
+      lastHour = hour;
+      if (settings?.beepOnTheHour) void api.beep();
+    }
     refreshTray();
     render();
   });

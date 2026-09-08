@@ -3,78 +3,164 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Calendo Settings</title>
+    <title>Settings</title>
     <link rel="stylesheet" href="settings.css" />
   </head>
   <body>
     <main class="page">
-      <header class="intro">
-        <h1>Settings</h1>
-        <p>Calendo lives in the menu bar. These options change what it shows there, and how the month is laid out.</p>
-      </header>
+      <div class="tabs" id="tabs" role="tablist" aria-label="Settings">
+        <button
+          type="button"
+          role="tab"
+          id="tab-general"
+          aria-controls="panel-general"
+          aria-selected="true"
+          data-tab="general"
+        >
+          General
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-appearance"
+          aria-controls="panel-appearance"
+          aria-selected="false"
+          data-tab="appearance"
+        >
+          Appearance
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-about"
+          aria-controls="panel-about"
+          aria-selected="false"
+          data-tab="about"
+        >
+          About
+        </button>
+      </div>
 
       <form id="form" autocomplete="off">
-        <section class="group" aria-labelledby="menubar-heading">
-          <h2 id="menubar-heading">Menu bar</h2>
-          <div class="card">
-            <div class="row">
-              <label for="format">Date format</label>
-              <select id="format" name="menuBarFormat"></select>
-            </div>
-            <p class="preview" id="format-preview"></p>
-          </div>
-        </section>
-
-        <section class="group" aria-labelledby="calendar-heading">
-          <h2 id="calendar-heading">Calendar</h2>
-          <div class="card">
-            <div class="row">
-              <label for="week-start">Week starts on</label>
-              <select id="week-start" name="weekStartsOn"></select>
-            </div>
-            <div class="row">
-              <div class="copy">
-                <label for="week-numbers">Week numbers</label>
-                <p>ISO week numbers along the left edge of the month.</p>
-              </div>
-              <input id="week-numbers" name="showWeekNumbers" type="checkbox" />
-            </div>
-            <div class="row">
-              <div class="copy">
-                <label for="dim-weekends">Dim weekends</label>
-                <p>Saturdays and Sundays use quieter type so weekdays stand forward.</p>
-              </div>
-              <input id="dim-weekends" name="dimWeekends" type="checkbox" />
-            </div>
-          </div>
-        </section>
-
-        <section class="group" aria-labelledby="general-heading">
-          <h2 id="general-heading">General</h2>
+        <section
+          class="panel"
+          id="panel-general"
+          role="tabpanel"
+          aria-labelledby="tab-general"
+        >
           <div class="card">
             <div class="row">
               <div class="copy">
-                <label for="login">Open at login</label>
+                <label for="login">Launch at login</label>
                 <p>Start Calendo when you log in to this Mac.</p>
               </div>
               <input id="login" name="launchAtLogin" type="checkbox" />
             </div>
             <div class="row">
-              <label for="theme">Appearance</label>
-              <select id="theme" name="theme">
-                <option value="system">Match System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
+              <div class="copy">
+                <label for="beep">Beep beep on the hour</label>
+                <p>Play a sound when the clock strikes the hour.</p>
+              </div>
+              <div class="row-controls">
+                <button
+                  type="button"
+                  class="preview"
+                  id="beep-preview"
+                  aria-label="Preview beep"
+                ></button>
+                <input id="beep" name="beepOnTheHour" type="checkbox" />
+              </div>
+            </div>
+            <div class="row">
+              <label for="week-start">First day of the week</label>
+              <select id="week-start" name="weekStartsOn"></select>
             </div>
           </div>
         </section>
-      </form>
 
-      <footer class="meta">
-        <p id="version">Calendo</p>
-        <button type="button" class="quit" id="quit">Quit Calendo</button>
-      </footer>
+        <section
+          class="panel"
+          id="panel-appearance"
+          role="tabpanel"
+          aria-labelledby="tab-appearance"
+          hidden
+        >
+          <div class="group">
+            <h2 id="menubar-heading">Menu bar</h2>
+            <div class="card">
+              <div
+                class="icon-styles"
+                id="icon-styles"
+                role="radiogroup"
+                aria-labelledby="menubar-heading"
+              ></div>
+              <div class="row">
+                <label for="show-weekday">Show day of week</label>
+                <input id="show-weekday" name="showWeekday" type="checkbox" />
+              </div>
+              <div class="row">
+                <label for="show-month">Show month</label>
+                <input id="show-month" name="showMonth" type="checkbox" />
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <h2 id="calendar-heading">Calendar</h2>
+            <div class="card">
+              <div class="row">
+                <div class="copy">
+                  <label for="week-numbers">Week numbers</label>
+                  <p>ISO week numbers along the left edge of the month.</p>
+                </div>
+                <input id="week-numbers" name="showWeekNumbers" type="checkbox" />
+              </div>
+              <div class="row highlight-row">
+                <div class="copy">
+                  <label id="highlight-label">Highlight</label>
+                </div>
+                <div
+                  class="weekday-picker"
+                  id="highlight-days"
+                  role="group"
+                  aria-labelledby="highlight-label"
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <h2 id="theme-heading">Theme</h2>
+            <div class="card">
+              <div class="row">
+                <label for="theme">Appearance</label>
+                <select id="theme" name="theme">
+                  <option value="system">Match System</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="panel"
+          id="panel-about"
+          role="tabpanel"
+          aria-labelledby="tab-about"
+          hidden
+        >
+          <div class="about">
+            <p class="about-name">Calendo</p>
+            <p class="about-version" id="version">Calendo</p>
+            <p class="about-copy">
+              A month calendar in the macOS menu bar. Nothing leaves this Mac.
+            </p>
+            <button type="button" class="quit" id="quit">Quit Calendo</button>
+          </div>
+        </section>
+      </form>
     </main>
     <script src="settings.js"></script>
   </body>

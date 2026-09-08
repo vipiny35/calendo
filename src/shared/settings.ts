@@ -1,75 +1,97 @@
-export type WeekStartsOn = 0 | 1 | 6;
+export type WeekStartsOn = Weekday;
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type Theme = "system" | "light" | "dark";
-export type MenuBarFormatId =
-  | "weekdayDay"
-  | "monthDay"
-  | "weekdayMonthDay"
-  | "day"
-  | "weekday"
-  | "full";
+export type MenuBarIconStyle = "filled" | "framed" | "none";
 
 export type AppSettings = {
-  menuBarFormat: MenuBarFormatId;
+  menuBarIcon: MenuBarIconStyle;
+  showWeekday: boolean;
+  showMonth: boolean;
   weekStartsOn: WeekStartsOn;
   showWeekNumbers: boolean;
-  dimWeekends: boolean;
+  highlightWeekdays: Weekday[];
   launchAtLogin: boolean;
+  beepOnTheHour: boolean;
   theme: Theme;
 };
 
-export const MENU_BAR_FORMATS: {
-  id: MenuBarFormatId;
-  sample: string;
-  options: Intl.DateTimeFormatOptions;
-}[] = [
-  {
-    id: "weekdayDay",
-    sample: "Tue 8",
-    options: { weekday: "short", day: "numeric" },
-  },
-  {
-    id: "monthDay",
-    sample: "Sep 8",
-    options: { month: "short", day: "numeric" },
-  },
-  {
-    id: "weekdayMonthDay",
-    sample: "Tue, Sep 8",
-    options: { weekday: "short", month: "short", day: "numeric" },
-  },
-  {
-    id: "day",
-    sample: "8",
-    options: { day: "numeric" },
-  },
-  {
-    id: "weekday",
-    sample: "Tuesday",
-    options: { weekday: "long" },
-  },
-  {
-    id: "full",
-    sample: "Tuesday, 8 September",
-    options: { weekday: "long", day: "numeric", month: "long" },
-  },
+export type MenuBarPart = "weekday" | "day" | "month";
+
+export const MENU_BAR_ICONS: { id: MenuBarIconStyle; label: string }[] = [
+  { id: "filled", label: "Filled date" },
+  { id: "framed", label: "Framed date" },
+  { id: "none", label: "Date only" },
 ];
+
+const PART_OPTIONS: Record<MenuBarPart, Intl.DateTimeFormatOptions> = {
+  weekday: { weekday: "short" },
+  day: { day: "numeric" },
+  month: { month: "short" },
+};
+
+/** Styles that no longer exist, mapped to the nearest one that does. */
+const RETIRED_ICONS: Record<string, MenuBarIconStyle> = {
+  outline: "framed",
+  calendar: "framed",
+};
+
+/**
+ * Formats persisted before icon style and weekday/month toggles. Mapped to the
+ * nearest equivalent so an existing settings file is not silently reset.
+ */
+const LEGACY_FORMATS: Record<
+  string,
+  Pick<AppSettings, "menuBarIcon" | "showWeekday" | "showMonth">
+> = {
+  iconOnly: { menuBarIcon: "filled", showWeekday: false, showMonth: false },
+  iconDay: { menuBarIcon: "filled", showWeekday: false, showMonth: false },
+  iconWeekdayDay: { menuBarIcon: "filled", showWeekday: true, showMonth: false },
+  iconWeekdayDayMonth: { menuBarIcon: "filled", showWeekday: true, showMonth: true },
+  dateOnly: { menuBarIcon: "none", showWeekday: true, showMonth: false },
+  weekdayDay: { menuBarIcon: "filled", showWeekday: true, showMonth: false },
+  monthDay: { menuBarIcon: "filled", showWeekday: false, showMonth: true },
+  weekdayMonthDay: { menuBarIcon: "filled", showWeekday: true, showMonth: true },
+  day: { menuBarIcon: "filled", showWeekday: false, showMonth: false },
+  weekday: { menuBarIcon: "filled", showWeekday: true, showMonth: false },
+  full: { menuBarIcon: "filled", showWeekday: true, showMonth: true },
+};
 
 export const WEEK_STARTS: { id: WeekStartsOn; label: string }[] = [
   { id: 0, label: "Sunday" },
   { id: 1, label: "Monday" },
+  { id: 2, label: "Tuesday" },
+  { id: 3, label: "Wednesday" },
+  { id: 4, label: "Thursday" },
+  { id: 5, label: "Friday" },
   { id: 6, label: "Saturday" },
 ];
 
+/** Monday → Sunday, matching the Highlight picker. */
+export const HIGHLIGHT_DAYS: { id: Weekday; name: string }[] = [
+  { id: 1, name: "Monday" },
+  { id: 2, name: "Tuesday" },
+  { id: 3, name: "Wednesday" },
+  { id: 4, name: "Thursday" },
+  { id: 5, name: "Friday" },
+  { id: 6, name: "Saturday" },
+  { id: 0, name: "Sunday" },
+];
+
+export const DEFAULT_HIGHLIGHT_WEEKDAYS: Weekday[] = [0, 6];
+
 export const DEFAULT_SETTINGS: AppSettings = {
-  menuBarFormat: "weekdayDay",
+  menuBarIcon: "filled",
+  showWeekday: true,
+  showMonth: false,
   weekStartsOn: 0,
   showWeekNumbers: false,
-  dimWeekends: true,
+  highlightWeekdays: [...DEFAULT_HIGHLIGHT_WEEKDAYS],
   launchAtLogin: false,
+  beepOnTheHour: false,
   theme: "system",
 };
 
-const FORMAT_IDS = new Set(MENU_BAR_FORMATS.map((item) => item.id));
+const ICON_IDS = new Set(MENU_BAR_ICONS.map((item) => item.id));
 const WEEK_START_IDS = new Set(WEEK_STARTS.map((item) => item.id));
 const THEMES = new Set<Theme>(["system", "light", "dark"]);
 
@@ -77,23 +99,119 @@ function asBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-export function formatMenuBarDate(
-  date: Date,
-  formatId: MenuBarFormatId,
-  locale?: string,
-): string {
-  const format =
-    MENU_BAR_FORMATS.find((item) => item.id === formatId) ?? MENU_BAR_FORMATS[0];
-  if (!format) return String(date.getDate());
-  return new Intl.DateTimeFormat(locale, format.options).format(date);
+function isWeekday(value: unknown): value is Weekday {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 6;
 }
 
-export function formatMenuBarPreview(
-  formatId: MenuBarFormatId,
+export function weekdayLetter(id: Weekday, locale?: string): string {
+  // 5 January 2020 is a Sunday, so adding `id` lands on that weekday.
+  return new Intl.DateTimeFormat(locale, { weekday: "narrow" }).format(
+    new Date(2020, 0, 5 + id, 12),
+  );
+}
+export function normalizeHighlightWeekdays(value: unknown): Weekday[] {
+  if (!Array.isArray(value)) return [...DEFAULT_HIGHLIGHT_WEEKDAYS];
+  return [...new Set(value.filter(isWeekday))].sort((a, b) => a - b);
+}
+
+/**
+ * Adjacent highlighted columns, in the displayed week order. Saturday and
+ * Sunday become one band when they sit next to each other.
+ */
+export function highlightedColumnRuns(
+  weekStartsOn: WeekStartsOn,
+  highlighted: readonly number[],
+): { start: number; count: number }[] {
+  const selected = new Set(highlighted);
+  const active = Array.from({ length: 7 }, (_, index) =>
+    selected.has((weekStartsOn + index) % 7),
+  );
+  const runs: { start: number; count: number }[] = [];
+  for (let index = 0; index < 7; ) {
+    if (!active[index]) {
+      index += 1;
+      continue;
+    }
+    let end = index + 1;
+    while (end < 7 && active[end]) end += 1;
+    runs.push({ start: index, count: end - index });
+    index = end;
+  }
+  return runs;
+}
+
+export function datedMenuBarIcon(style: MenuBarIconStyle): boolean {
+  return style === "filled";
+}
+
+export type MenuBarLabel = {
+  /**
+   * The date beside the clock. Null for the filled glyph, which carries the
+   * date on its own. The framed style draws this text inside its outline; the
+   * date-only style shows it as plain text.
+   */
+  text: string | null;
+  /** Day of the month when the glyph itself shows the date. */
+  day: number | null;
+  style: MenuBarIconStyle;
+};
+
+function formatPart(part: MenuBarPart, date: Date, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, PART_OPTIONS[part]).format(date);
+}
+
+/**
+ * What the menu bar shows. The filled glyph is the whole item, so the weekday
+ * and month toggles do not apply to it; every other style spells the date out.
+ */
+export function menuBarLabel(
+  settings: Pick<AppSettings, "menuBarIcon" | "showWeekday" | "showMonth">,
+  date: Date,
   locale?: string,
-  date = new Date(),
+): MenuBarLabel {
+  if (datedMenuBarIcon(settings.menuBarIcon)) {
+    return { text: null, day: date.getDate(), style: settings.menuBarIcon };
+  }
+  const parts: string[] = [];
+  if (settings.showWeekday) parts.push(formatPart("weekday", date, locale));
+  parts.push(formatPart("day", date, locale));
+  if (settings.showMonth) parts.push(formatPart("month", date, locale));
+  return {
+    text: parts.join(" "),
+    day: null,
+    style: settings.menuBarIcon,
+  };
+}
+
+export function formatMenuBarDate(
+  settings: Pick<AppSettings, "menuBarIcon" | "showWeekday" | "showMonth">,
+  date: Date,
+  locale?: string,
 ): string {
-  return formatMenuBarDate(date, formatId, locale);
+  return menuBarLabel(settings, date, locale).text ?? "";
+}
+
+function migrateMenuBar(
+  input: Record<string, unknown>,
+): Pick<AppSettings, "menuBarIcon" | "showWeekday" | "showMonth"> {
+  const storedIcon =
+    typeof input.menuBarIcon === "string"
+      ? RETIRED_ICONS[input.menuBarIcon] ?? input.menuBarIcon
+      : input.menuBarIcon;
+  if (ICON_IDS.has(storedIcon as MenuBarIconStyle)) {
+    return {
+      menuBarIcon: storedIcon as MenuBarIconStyle,
+      showWeekday: asBoolean(input.showWeekday, DEFAULT_SETTINGS.showWeekday),
+      showMonth: asBoolean(input.showMonth, DEFAULT_SETTINGS.showMonth),
+    };
+  }
+  const storedFormat =
+    typeof input.menuBarFormat === "string" ? input.menuBarFormat : "";
+  return LEGACY_FORMATS[storedFormat] ?? {
+    menuBarIcon: DEFAULT_SETTINGS.menuBarIcon,
+    showWeekday: DEFAULT_SETTINGS.showWeekday,
+    showMonth: DEFAULT_SETTINGS.showMonth,
+  };
 }
 
 export function normalizeSettings(raw: unknown): AppSettings {
@@ -102,13 +220,11 @@ export function normalizeSettings(raw: unknown): AppSettings {
       ? (raw as Record<string, unknown>)
       : {};
   const weekStartsOn = input.weekStartsOn;
-  const menuBarFormat = input.menuBarFormat;
   const theme = input.theme;
+  const menuBar = migrateMenuBar(input);
 
   return {
-    menuBarFormat: FORMAT_IDS.has(menuBarFormat as MenuBarFormatId)
-      ? (menuBarFormat as MenuBarFormatId)
-      : DEFAULT_SETTINGS.menuBarFormat,
+    ...menuBar,
     weekStartsOn: WEEK_START_IDS.has(weekStartsOn as WeekStartsOn)
       ? (weekStartsOn as WeekStartsOn)
       : DEFAULT_SETTINGS.weekStartsOn,
@@ -116,11 +232,17 @@ export function normalizeSettings(raw: unknown): AppSettings {
       input.showWeekNumbers,
       DEFAULT_SETTINGS.showWeekNumbers,
     ),
-    dimWeekends: asBoolean(input.dimWeekends, DEFAULT_SETTINGS.dimWeekends),
+    highlightWeekdays:
+      "highlightWeekdays" in input
+        ? normalizeHighlightWeekdays(input.highlightWeekdays)
+        : input.dimWeekends === false
+          ? []
+          : [...DEFAULT_HIGHLIGHT_WEEKDAYS],
     launchAtLogin: asBoolean(
       input.launchAtLogin,
       DEFAULT_SETTINGS.launchAtLogin,
     ),
+    beepOnTheHour: asBoolean(input.beepOnTheHour, DEFAULT_SETTINGS.beepOnTheHour),
     theme: THEMES.has(theme as Theme) ? (theme as Theme) : DEFAULT_SETTINGS.theme,
   };
 }
