@@ -117,6 +117,10 @@ function startCalendar(api: DesktopApi): void {
   const eventTitle = requireElement<HTMLElement>("event-title");
   const eventMeta = requireElement<HTMLElement>("event-meta");
   const joinMeeting = requireElement<HTMLButtonElement>("join-meeting");
+  const dayEvents = requireElement<HTMLElement>("day-events");
+  const dayEventsTitle = requireElement<HTMLElement>("day-events-title");
+  const dayEventsCount = requireElement<HTMLElement>("day-events-count");
+  const dayEventsList = requireElement<HTMLElement>("day-events-list");
   prev.append(lucideIcon(ChevronLeft, 18));
   todayButton.append(lucideIcon(CircleDot, 18));
   next.append(lucideIcon(ChevronRight, 18));
@@ -130,6 +134,7 @@ function startCalendar(api: DesktopApi): void {
   let lastTrayLabel = "";
   let lastHour = new Date().getHours();
   let upcomingEvent: UpcomingEvent | null = null;
+  let calendarEvents: UpcomingEvent[] = [];
   let eventError: string | null = null;
   let eventRequest = 0;
 
@@ -168,23 +173,75 @@ function startCalendar(api: DesktopApi): void {
     const request = ++eventRequest;
     if (!settings?.showUpcomingEvent) {
       upcomingEvent = null;
+      calendarEvents = [];
       eventError = null;
       paintEvent();
+      paintDayEvents();
       refreshTray();
       return;
     }
     try {
-      const nextEvent = await api.getUpcomingEvent();
+      const monthStart = new Date(viewYear, viewMonth, 1);
+      const monthEnd = new Date(viewYear, viewMonth + 1, 1);
+      const [nextEvent, monthEvents] = await Promise.all([
+        api.getUpcomingEvent(),
+        api.getCalendarEvents(monthStart.getTime(), monthEnd.getTime()),
+      ]);
       if (request !== eventRequest) return;
       upcomingEvent = nextEvent;
+      calendarEvents = monthEvents;
       eventError = null;
     } catch {
       if (request !== eventRequest) return;
       upcomingEvent = null;
+      calendarEvents = [];
       eventError = "Calendar access is not enabled";
     }
     paintEvent();
+    paintDayEvents();
     refreshTray();
+  };
+
+  const paintDayEvents = (): void => {
+    const enabled = settings?.showUpcomingEvent ?? false;
+    dayEvents.hidden = !enabled;
+    if (!enabled) return;
+    const selectedDate = fromIso(focusIso);
+    dayEventsTitle.textContent = new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    }).format(selectedDate);
+    const selectedEvents = calendarEvents.filter(
+      (event) => toIso(new Date(event.startAt)) === focusIso,
+    );
+    dayEventsCount.textContent = selectedEvents.length
+      ? `${selectedEvents.length} event${selectedEvents.length === 1 ? "" : "s"}`
+      : "";
+    if (!selectedEvents.length) {
+      const empty = document.createElement("p");
+      empty.className = "day-events-empty";
+      empty.textContent = eventError ? "Allow Calendar access to see events." : "No events";
+      dayEventsList.replaceChildren(empty);
+      return;
+    }
+    dayEventsList.replaceChildren(
+      ...selectedEvents.map((event) => {
+        const item = document.createElement("div");
+        item.className = "day-event";
+        const dot = document.createElement("span");
+        dot.className = "day-event-dot";
+        dot.setAttribute("aria-hidden", "true");
+        const title = document.createElement("span");
+        title.className = "day-event-title";
+        title.textContent = event.title;
+        const time = document.createElement("span");
+        time.className = "day-event-time";
+        time.textContent = eventTimeRange(event);
+        item.append(dot, title, time);
+        return item;
+      }),
+    );
   };
 
   const refreshTray = (): void => {
@@ -274,7 +331,18 @@ function startCalendar(api: DesktopApi): void {
         const number = document.createElement("span");
         number.className = "day-number";
         number.textContent = String(day.day);
-        button.append(number);
+        const dots = document.createElement("span");
+        dots.className = "day-event-dots";
+        const eventCount = calendarEvents.filter(
+          (event) => toIso(new Date(event.startAt)) === day.iso,
+        ).length;
+        for (let index = 0; index < Math.min(3, eventCount); index += 1) {
+          const dot = document.createElement("span");
+          dot.className = "day-event-dot";
+          dot.setAttribute("aria-hidden", "true");
+          dots.append(dot);
+        }
+        button.append(number, dots);
         button.setAttribute("aria-label", dayName(fromIso(day.iso)));
         if (day.inMonth) button.classList.add("is-in-month");
         else button.classList.add("is-outside");
@@ -293,6 +361,7 @@ function startCalendar(api: DesktopApi): void {
             viewMonth = day.month;
           }
           render({ focusGrid: true });
+          paintDayEvents();
         });
         cell.append(button);
         row.append(cell);
@@ -327,6 +396,8 @@ function startCalendar(api: DesktopApi): void {
     viewMonth = today.getMonth();
     focusIso = toIso(today);
     render({ announceMonth: true, focusGrid: true });
+    paintDayEvents();
+    void refreshUpcoming();
   };
 
   const shiftMonth = (delta: number): void => {
@@ -336,6 +407,8 @@ function startCalendar(api: DesktopApi): void {
     viewMonth = next.month;
     focusIso = toIso(keep);
     render({ announceMonth: true, focusGrid: true });
+    paintDayEvents();
+    void refreshUpcoming();
   };
 
   const moveFocus = (days: number): void => {
@@ -345,6 +418,8 @@ function startCalendar(api: DesktopApi): void {
       viewYear = next.getFullYear();
       viewMonth = next.getMonth();
       render({ announceMonth: true, focusGrid: true });
+      paintDayEvents();
+      void refreshUpcoming();
       return;
     }
     render({ focusGrid: true });
@@ -426,6 +501,7 @@ function startCalendar(api: DesktopApi): void {
     settings = next;
     applyTheme(next.theme);
     paintEvent();
+    paintDayEvents();
     refreshTray();
     render();
     void refreshUpcoming();

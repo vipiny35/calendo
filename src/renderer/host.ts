@@ -22,6 +22,7 @@ export type DesktopApi = {
   ) => Promise<void>;
   beep: () => Promise<void>;
   getUpcomingEvent: () => Promise<UpcomingEvent | null>;
+  getCalendarEvents: (startAt: number, endAt: number) => Promise<UpcomingEvent[]>;
   requestCalendarAccess: () => Promise<boolean>;
   joinMeeting: (url: string) => Promise<void>;
   checkForUpdates: () => Promise<string>;
@@ -75,6 +76,8 @@ export const api: DesktopApi = {
     invoke<void>("set_tray_label", { title, iconDay, style, image }),
   beep: () => invoke<void>("beep"),
   getUpcomingEvent: () => invoke<UpcomingEvent | null>("get_upcoming_event"),
+  getCalendarEvents: (startAt, endAt) =>
+    invoke<UpcomingEvent[]>("get_calendar_events", { start_at: startAt, end_at: endAt }),
   requestCalendarAccess: () => invoke<boolean>("request_calendar_access"),
   joinMeeting: (url) => invoke<void>("join_meeting", { url }),
   checkForUpdates: () => invoke<string>("check_for_updates"),

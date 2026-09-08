@@ -30,6 +30,7 @@ const CALENDAR_WIDTH: f64 = 288.0;
 const CALENDAR_WIDTH_WEEKS: f64 = 312.0;
 const CALENDAR_HEIGHT: f64 = 348.0;
 const EVENT_CARD_HEIGHT: f64 = 96.0;
+const EVENT_LIST_HEIGHT: f64 = 132.0;
 const SETTINGS_WIDTH: f64 = 560.0;
 const SETTINGS_HEIGHT: f64 = 560.0;
 
@@ -152,7 +153,11 @@ fn calendar_window_size(show_week_numbers: bool, show_upcoming_event: bool) -> (
         calendar_width(show_week_numbers),
         CALENDAR_HEIGHT
             + glass::CARET_HEIGHT
-            + if show_upcoming_event { EVENT_CARD_HEIGHT } else { 0.0 },
+            + if show_upcoming_event {
+                EVENT_CARD_HEIGHT + EVENT_LIST_HEIGHT
+            } else {
+                0.0
+            },
     )
 }
 
@@ -606,6 +611,11 @@ fn get_upcoming_event() -> Result<Option<events::UpcomingEvent>, String> {
 }
 
 #[tauri::command]
+fn get_calendar_events(start_at: i64, end_at: i64) -> Result<Vec<events::UpcomingEvent>, String> {
+    events::fetch_range(start_at, end_at)
+}
+
+#[tauri::command]
 fn request_calendar_access() -> Result<bool, String> {
     events::request_access_if_needed()
 }
@@ -687,6 +697,7 @@ pub fn run() {
             app_version,
             check_for_updates,
             get_upcoming_event,
+            get_calendar_events,
             request_calendar_access,
             join_meeting,
         ])

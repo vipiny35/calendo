@@ -51,7 +51,7 @@ fn first_url(value: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "macos")]
-fn fetch_macos() -> Result<Option<UpcomingEvent>, String> {
+fn fetch_macos_range(start_ms: i64, end_ms: i64) -> Result<Vec<UpcomingEvent>, String> {
     use objc2::rc::autoreleasepool;
     use objc2::rc::Retained;
     use objc2::AnyThread;
@@ -61,27 +61,25 @@ fn fetch_macos() -> Result<Option<UpcomingEvent>, String> {
     autoreleasepool(|_| {
         let status = unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) };
         if status == EKAuthorizationStatus::NotDetermined {
-            return Ok(None);
+            return Ok(Vec::new());
         }
         if status != EKAuthorizationStatus::FullAccess {
             return Err("Calendar access is not enabled".into());
         }
 
         let store = unsafe { EKEventStore::init(EKEventStore::alloc()) };
-        let now = NSDate::now();
-        let horizon = NSDate::dateWithTimeIntervalSinceNow(7.0 * 24.0 * 60.0 * 60.0);
+        let start = NSDate::dateWithTimeIntervalSince1970(start_ms as f64 / 1000.0);
+        let end = NSDate::dateWithTimeIntervalSince1970(end_ms as f64 / 1000.0);
         let predicate = unsafe {
-            store.predicateForEventsWithStartDate_endDate_calendars(&now, &horizon, None)
+            store.predicateForEventsWithStartDate_endDate_calendars(&start, &end, None)
         };
         let events = unsafe { store.eventsMatchingPredicate(&predicate) };
-        let now_seconds = now.timeIntervalSince1970();
-
-        let mut selected: Option<(f64, UpcomingEvent)> = None;
+        let mut found = Vec::new();
         for index in 0..events.count() {
             let event = events.objectAtIndex(index);
             let start = unsafe { event.startDate().timeIntervalSince1970() };
             let end = unsafe { event.endDate().timeIntervalSince1970() };
-            if unsafe { event.isAllDay() } || end <= now_seconds || end <= start {
+            if unsafe { event.isAllDay() } || end <= start {
                 continue;
             }
             if unsafe { event.status() } == objc2_event_kit::EKEventStatus::Canceled {
@@ -111,7 +109,7 @@ fn fetch_macos() -> Result<Option<UpcomingEvent>, String> {
             let id = unsafe { event.eventIdentifier() }
                 .map(|value| ns_string(&value))
                 .unwrap_or_else(|| format!("{start:.3}-{end:.3}-{title}"));
-            let candidate = UpcomingEvent {
+            found.push(UpcomingEvent {
                 id,
                 title: if title.is_empty() {
                     "Untitled event".into()
@@ -123,16 +121,21 @@ fn fetch_macos() -> Result<Option<UpcomingEvent>, String> {
                 calendar,
                 location: location.filter(|value| !value.is_empty()),
                 join_url,
-            };
-            if selected
-                .as_ref()
-                .map_or(true, |(earliest, _)| start < *earliest)
-            {
-                selected = Some((start, candidate));
-            }
+            });
         }
-        Ok(selected.map(|(_, event)| event))
+        found.sort_by_key(|event| event.start_at);
+        Ok(found)
     })
+}
+
+#[cfg(target_os = "macos")]
+fn fetch_macos() -> Result<Option<UpcomingEvent>, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?;
+    let start_ms = now.as_millis() as i64;
+    let end_ms = start_ms.saturating_add(7 * 24 * 60 * 60 * 1000);
+    Ok(fetch_macos_range(start_ms, end_ms)?.into_iter().next())
 }
 
 #[cfg(target_os = "macos")]
@@ -161,6 +164,21 @@ pub fn fetch_upcoming() -> Result<Option<UpcomingEvent>, String> {
     #[cfg(not(target_os = "macos"))]
     {
         Ok(None)
+    }
+}
+
+pub fn fetch_range(start_ms: i64, end_ms: i64) -> Result<Vec<UpcomingEvent>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        if end_ms <= start_ms {
+            return Ok(Vec::new());
+        }
+        fetch_macos_range(start_ms, end_ms)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (start_ms, end_ms);
+        Ok(Vec::new())
     }
 }
 
