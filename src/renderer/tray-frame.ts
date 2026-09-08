@@ -1,22 +1,18 @@
 /**
- * The framed menu bar glyph: the date inside a rounded outline.
- *
- * The dated glyphs are PNGs baked by `pnpm icon`, but this one holds text that
- * changes with the locale and the weekday and month toggles, so it is drawn
- * here instead. The tray scales any image to 18pt tall and keeps its aspect
- * ratio, so a 32px-tall canvas puts this glyph at the same height as the baked
- * ones, and the box metrics below mirror `trayMetrics()` in
- * `scripts/generate-icon.swift`.
+ * Rounded date badge with transparent text cutouts. macOS tints the template
+ * image white on a dark menu bar and dark on a light menu bar.
+ * The same drawing supplies the tray image and Appearance preview.
  */
 
 const BOX = 32;
-/** Clear pixels around the outline, so the stroke is not clipped. */
+/** Clear pixels around the badge. */
 const MARGIN = 1;
-const STROKE = 3.3;
 const RADIUS = 7.4;
+// Keep the original font metrics for the badge width; enlarge only the text.
 const FONT = '590 19px -apple-system, "SF Pro Text", system-ui, sans-serif';
-/** Space between the text and the stroke. */
-const PAD_X = 5;
+const TEXT_FONT = '590 21px -apple-system, "SF Pro Text", system-ui, sans-serif';
+/** Space between the text and the badge edge. */
+const PAD_X = 8;
 
 function context(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   const ctx = canvas.getContext("2d");
@@ -25,12 +21,12 @@ function context(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   return ctx;
 }
 
-function outline(ctx: CanvasRenderingContext2D, width: number): void {
-  const left = MARGIN + STROKE / 2;
-  const top = MARGIN + STROKE / 2;
+function badge(ctx: CanvasRenderingContext2D, width: number): void {
+  const left = MARGIN;
+  const top = MARGIN;
   const right = width - left;
   const bottom = BOX - top;
-  const radius = RADIUS - STROKE / 2;
+  const radius = RADIUS;
 
   ctx.beginPath();
   ctx.moveTo(left + radius, top);
@@ -39,8 +35,7 @@ function outline(ctx: CanvasRenderingContext2D, width: number): void {
   ctx.arcTo(left, bottom, left, top, radius);
   ctx.arcTo(left, top, right, top, radius);
   ctx.closePath();
-  ctx.lineWidth = STROKE;
-  ctx.stroke();
+  ctx.fill();
 }
 
 /**
@@ -51,17 +46,18 @@ function draw(text: string): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.height = BOX;
   canvas.width = Math.max(
-    Math.ceil(context(canvas).measureText(text).width + (PAD_X + STROKE + MARGIN) * 2),
+    Math.ceil(context(canvas).measureText(text).width + (PAD_X + MARGIN) * 2),
     BOX,
   );
 
   const ctx = context(canvas);
-  ctx.strokeStyle = "#000";
   ctx.fillStyle = "#000";
-  outline(ctx, canvas.width);
+  badge(ctx, canvas.width);
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.font = TEXT_FONT;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, canvas.width / 2, BOX / 2);
+  ctx.fillText(text, canvas.width / 2, BOX / 2, canvas.width - (MARGIN + 2) * 2);
   return canvas;
 }
 

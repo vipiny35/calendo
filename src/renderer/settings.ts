@@ -1,5 +1,5 @@
 import {
-  datedMenuBarIcon,
+  supportsDateParts,
   HIGHLIGHT_DAYS,
   MENU_BAR_ICONS,
   WEEK_STARTS,
@@ -100,10 +100,13 @@ function startSettings(api: DesktopApi): void {
   const highlightDays = requireElement<HTMLDivElement>("highlight-days");
   const login = requireElement<HTMLInputElement>("login");
   const beep = requireElement<HTMLInputElement>("beep");
+  const autoUpdate = requireElement<HTMLInputElement>("auto-update");
   const beepPreview = requireElement<HTMLButtonElement>("beep-preview");
   const theme = requireElement<HTMLSelectElement>("theme");
   const version = requireElement<HTMLParagraphElement>("version");
   const quit = requireElement<HTMLButtonElement>("quit");
+  const checkUpdates = requireElement<HTMLButtonElement>("check-updates");
+  const updateStatus = requireElement<HTMLParagraphElement>("update-status");
 
   buildIconStyles(iconStyles);
   beepPreview.append(lucideIcon(Volume2, 16));
@@ -149,10 +152,9 @@ function startSettings(api: DesktopApi): void {
     }
   };
 
-  // The filled glyph is the whole menu bar item, so it has no room for the
-  // weekday or the month.
+  // Calendar glyphs stand alone; date parts apply to cutout and text styles.
   const paintDateParts = (style: MenuBarIconStyle): void => {
-    const off = datedMenuBarIcon(style);
+    const off = !supportsDateParts(style);
     for (const input of [showWeekday, showMonth]) {
       input.disabled = off;
       input.closest(".row")?.classList.toggle("is-off", off);
@@ -170,6 +172,7 @@ function startSettings(api: DesktopApi): void {
     paintHighlights(settings.highlightWeekdays);
     login.checked = settings.launchAtLogin;
     beep.checked = settings.beepOnTheHour;
+    autoUpdate.checked = settings.autoUpdate;
     theme.value = settings.theme;
   };
 
@@ -181,6 +184,7 @@ function startSettings(api: DesktopApi): void {
     highlightWeekdays: selectedWeekdays(),
     launchAtLogin: login.checked,
     beepOnTheHour: beep.checked,
+    autoUpdate: autoUpdate.checked,
     theme: theme.value as Theme,
   });
 
@@ -235,7 +239,24 @@ function startSettings(api: DesktopApi): void {
     void api.quitApp();
   });
 
-  void api.getSettings().then(paint);
+  const checkForUpdates = async (): Promise<void> => {
+    updateStatus.textContent = "Checking…";
+    try {
+      const latest = await api.checkForUpdates();
+      const current = await api.getAppVersion();
+      updateStatus.textContent = latest === current || latest === `v${current}`
+        ? "Calendo is up to date."
+        : `Update available: ${latest}`;
+    } catch {
+      updateStatus.textContent = "Could not check for updates.";
+    }
+  };
+  checkUpdates.addEventListener("click", () => void checkForUpdates());
+
+  void api.getSettings().then((settings) => {
+    paint(settings);
+    if (settings.autoUpdate) void checkForUpdates();
+  });
   void api.getAppVersion().then((value) => {
     version.textContent = value;
   });

@@ -20,6 +20,7 @@ export type DesktopApi = {
     image: number[] | null,
   ) => Promise<void>;
   beep: () => Promise<void>;
+  checkForUpdates: () => Promise<string>;
   hideCalendar: () => Promise<void>;
   setCalendarPinned: (pinned: boolean) => Promise<void>;
   openSettings: () => Promise<void>;
@@ -69,6 +70,7 @@ export const api: DesktopApi = {
   setTrayLabel: (title, iconDay, style, image) =>
     invoke<void>("set_tray_label", { title, iconDay, style, image }),
   beep: () => invoke<void>("beep"),
+  checkForUpdates: () => invoke<string>("check_for_updates"),
   hideCalendar: () => invoke<void>("hide_calendar"),
   setCalendarPinned: (pinned) => invoke<void>("set_calendar_pinned", { pinned }),
   openSettings: () => invoke<void>("open_settings"),

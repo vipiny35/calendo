@@ -4,6 +4,7 @@
 //! left click opens a month popover, and a settings window opened on demand.
 
 mod glass;
+mod beep;
 mod settings;
 
 use settings::{AppSettings, SettingsStore};
@@ -24,8 +25,8 @@ const CALENDAR_LABEL: &str = "calendar";
 const SETTINGS_LABEL: &str = "settings";
 const TRAY_ID: &str = "calendo";
 const AUTOSTART_ARG: &str = "--autostart";
-const CALENDAR_WIDTH: f64 = 312.0;
-const CALENDAR_WIDTH_WEEKS: f64 = 336.0;
+const CALENDAR_WIDTH: f64 = 288.0;
+const CALENDAR_WIDTH_WEEKS: f64 = 312.0;
 const CALENDAR_HEIGHT: f64 = 348.0;
 const SETTINGS_WIDTH: f64 = 410.0;
 const SETTINGS_HEIGHT: f64 = 520.0;
@@ -509,7 +510,7 @@ fn update_settings(
     Ok(saved)
 }
 
-/// Paints the menu bar: the label, the glyph, or both.
+/// Paints exactly one menu bar style: plain text or a glyph.
 ///
 /// `title` is None for icon-only. `icon_day` is None when the style has no
 /// date. `image` carries the framed glyph, which the renderer draws because it
@@ -526,7 +527,14 @@ fn set_tray_label(
         let Some(tray) = app.tray_by_id(TRAY_ID) else {
             return;
         };
-        let _ = tray.set_title(title.as_deref());
+        // On macOS, set_title(None) leaves the previous native title intact.
+        // Explicitly clear it for every glyph style when leaving plain text.
+        let text = if style == "none" {
+            title.as_deref().unwrap_or("")
+        } else {
+            ""
+        };
+        let _ = tray.set_title(Some(text));
         let bytes: Option<&[u8]> = match style.as_str() {
             "none" => None,
             "framed" => image.as_deref(),
@@ -552,11 +560,7 @@ fn beep(app: AppHandle) -> Result<(), String> {
         let path = app.path()
             .resolve("resources/beep.mp3", tauri::path::BaseDirectory::Resource)
             .map_err(|error| error.to_string())?;
-        let mut child = std::process::Command::new("/usr/bin/afplay")
-            .arg(path)
-            .spawn()
-            .map_err(|error| error.to_string())?;
-        std::thread::spawn(move || { let _ = child.wait(); });
+        beep::play_native(&path, beep::beep_playback_volume())?;
     }
     Ok(())
 }
@@ -584,6 +588,23 @@ fn quit_app(app: AppHandle) {
 #[tauri::command]
 fn app_version(app: AppHandle) -> String {
     app.package_info().version.to_string()
+}
+
+#[tauri::command]
+fn check_for_updates() -> Result<String, String> {
+    let output = std::process::Command::new("/usr/bin/curl")
+        .args(["-fsSL", "https://api.github.com/repos/vipiny35/calendo/releases/latest", "-H", "User-Agent: Calendo"])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err("Could not reach update server".into());
+    }
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|error| error.to_string())?;
+    json.get("tag_name")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| "No release found".into())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -622,6 +643,7 @@ pub fn run() {
             open_settings,
             quit_app,
             app_version,
+            check_for_updates,
         ])
         .run(tauri::generate_context!())
         .expect("Calendo failed to start");

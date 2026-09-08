@@ -130,8 +130,7 @@ function startCalendar(api: DesktopApi): void {
     const signature = `${label.text ?? ""}|${label.day ?? ""}|${label.style}`;
     if (signature === lastTrayLabel) return;
     lastTrayLabel = signature;
-    // The framed style draws its own glyph, so its date goes inside the
-    // outline rather than beside it.
+    // The cutout style draws its date into the glyph instead of the title.
     const framed = label.style === "framed" ? label.text : null;
     void api.setTrayLabel(
       framed === null ? label.text : null,

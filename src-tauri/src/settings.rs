@@ -43,6 +43,7 @@ pub struct AppSettings {
     pub menu_bar_format: String,
     pub launch_at_login: bool,
     pub beep_on_the_hour: bool,
+    pub auto_update: bool,
     pub theme: String,
 }
 
@@ -59,6 +60,7 @@ impl Default for AppSettings {
             menu_bar_format: String::new(),
             launch_at_login: false,
             beep_on_the_hour: false,
+            auto_update: true,
             theme: "system".into(),
         }
     }

@@ -12,7 +12,9 @@
   --month-stroke: rgb(0 0 0 / 22%);
   --column-fill: rgb(0 0 0 / 6%);
   --rim: rgb(0 0 0 / 12%);
-  --accent: Highlight;
+  --accent: AccentColor;
+  --accent-text: AccentColorText;
+  --selection-border: #000;
   --caret-x: 50%;
   --caret-size: 14px;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
@@ -36,6 +38,7 @@
     --month-stroke: rgb(255 255 255 / 28%);
     --column-fill: rgb(255 255 255 / 7%);
     --rim: rgb(255 255 255 / 12%);
+    --selection-border: #fff;
     color-scheme: dark;
   }
 }
@@ -63,6 +66,7 @@
   --month-stroke: rgb(255 255 255 / 28%);
   --column-fill: rgb(255 255 255 / 7%);
   --rim: rgb(255 255 255 / 12%);
+  --selection-border: #fff;
   color-scheme: dark;
 }
 
@@ -113,13 +117,15 @@ body {
 
 .caret {
   position: absolute;
+  z-index: 3;
   top: calc(var(--caret-size) * -1 + 1px);
   left: var(--caret-x);
-  width: 20px;
+  width: 18px;
   height: var(--caret-size);
   transform: translateX(-50%);
   background: var(--paper);
   clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  filter: drop-shadow(0 1px 1.5px var(--rim));
   pointer-events: none;
 }
 
@@ -309,7 +315,7 @@ body {
 }
 
 .day.is-selected:not(.is-today) .day-number {
-  box-shadow: inset 0 0 0 1.5px var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--selection-border);
 }
 
 .day:hover:not(.is-today):not(.is-selected) .day-number {

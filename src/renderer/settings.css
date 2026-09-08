@@ -10,7 +10,8 @@
   --ink: #1a1c1e;
   --ink-soft: #5c636a;
   --line: rgb(26 28 30 / 10%);
-  --accent: Highlight;
+  --accent: AccentColor;
+  --accent-text: AccentColorText;
   --control: #fff;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
     sans-serif;
@@ -57,6 +58,7 @@ body {
   height: 100%;
   overflow: hidden;
   background: var(--paper);
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -195,7 +197,7 @@ body {
 
 .weekday-toggle button[aria-pressed="true"] {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 .copy {
@@ -207,6 +209,12 @@ body {
   color: var(--ink-soft);
   font-size: 12px;
   line-height: 1.35;
+}
+
+.row > label,
+.copy > label {
+  font-size: 14px;
+  font-weight: 520;
 }
 
 .icon-styles {
@@ -232,13 +240,13 @@ body {
 
 .icon-styles button[aria-checked="true"] {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
 }
 
 .mb-icon {
   display: block;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   background-color: currentColor;
   -webkit-mask: var(--tray-glyph) center / contain no-repeat;
   mask: var(--tray-glyph) center / contain no-repeat;

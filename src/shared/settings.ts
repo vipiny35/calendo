@@ -12,15 +12,16 @@ export type AppSettings = {
   highlightWeekdays: Weekday[];
   launchAtLogin: boolean;
   beepOnTheHour: boolean;
+  autoUpdate: boolean;
   theme: Theme;
 };
 
 export type MenuBarPart = "weekday" | "day" | "month";
 
 export const MENU_BAR_ICONS: { id: MenuBarIconStyle; label: string }[] = [
-  { id: "filled", label: "Filled date" },
-  { id: "framed", label: "Framed date" },
-  { id: "calendar", label: "Calendar" },
+  { id: "filled", label: "Calendar with date" },
+  { id: "calendar", label: "Dotted calendar" },
+  { id: "framed", label: "Cutout date" },
   { id: "none", label: "Date only" },
 ];
 
@@ -88,6 +89,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   highlightWeekdays: [...DEFAULT_HIGHLIGHT_WEEKDAYS],
   launchAtLogin: false,
   beepOnTheHour: false,
+  autoUpdate: true,
   theme: "system",
 };
 
@@ -144,10 +146,15 @@ export function datedMenuBarIcon(style: MenuBarIconStyle): boolean {
   return style === "filled";
 }
 
+export function supportsDateParts(style: MenuBarIconStyle): boolean {
+  return style === "framed" || style === "none";
+}
+
 export type MenuBarLabel = {
   /**
    * The date beside the clock. Null for the filled glyph, which carries the
-   * date on its own. The framed style draws this text inside its outline; the
+   * date on its own. The dotted calendar also has no text. The framed style
+   * cuts this text out of a filled background; the
    * date-only style shows it as plain text.
    */
   text: string | null;
@@ -161,8 +168,7 @@ function formatPart(part: MenuBarPart, date: Date, locale?: string): string {
 }
 
 /**
- * What the menu bar shows. The filled glyph is the whole item, so the weekday
- * and month toggles do not apply to it; every other style spells the date out.
+ * Calendar glyphs stand alone. Cutout and plain-text styles spell the date out.
  */
 export function menuBarLabel(
   settings: Pick<AppSettings, "menuBarIcon" | "showWeekday" | "showMonth">,
@@ -171,6 +177,9 @@ export function menuBarLabel(
 ): MenuBarLabel {
   if (datedMenuBarIcon(settings.menuBarIcon)) {
     return { text: null, day: date.getDate(), style: settings.menuBarIcon };
+  }
+  if (!supportsDateParts(settings.menuBarIcon)) {
+    return { text: null, day: null, style: settings.menuBarIcon };
   }
   const parts: string[] = [];
   if (settings.showWeekday) parts.push(formatPart("weekday", date, locale));
@@ -243,6 +252,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       DEFAULT_SETTINGS.launchAtLogin,
     ),
     beepOnTheHour: asBoolean(input.beepOnTheHour, DEFAULT_SETTINGS.beepOnTheHour),
+    autoUpdate: asBoolean(input.autoUpdate, DEFAULT_SETTINGS.autoUpdate),
     theme: THEMES.has(theme as Theme) ? (theme as Theme) : DEFAULT_SETTINGS.theme,
   };
 }

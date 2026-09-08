@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SETTINGS,
+  MENU_BAR_ICONS,
+  supportsDateParts,
   formatMenuBarDate,
   highlightedColumnRuns,
   menuBarLabel,
@@ -42,6 +44,11 @@ describe("normalizeSettings", () => {
 
   it("defaults to Saturday and Sunday columns", () => {
     expect(normalizeSettings({}).highlightWeekdays).toEqual([0, 6]);
+  });
+
+  it("enables automatic update checks by default", () => {
+    expect(normalizeSettings({}).autoUpdate).toBe(true);
+    expect(normalizeSettings({ autoUpdate: false }).autoUpdate).toBe(false);
   });
 
   it("migrates dim weekends off to no highlighted columns", () => {
@@ -95,6 +102,20 @@ describe("menu bar label", () => {
     expect(
       menuBarLabel({ menuBarIcon: "filled", showWeekday: true, showMonth: true }, date, "en-US"),
     ).toEqual({ text: null, day: 8, style: "filled" });
+  });
+
+  it("keeps both calendar icons standalone and orders the picker", () => {
+    expect(MENU_BAR_ICONS.map(({ id }) => id)).toEqual(["filled", "calendar", "framed", "none"]);
+    for (const style of ["filled", "calendar"] as const) {
+      expect(supportsDateParts(style)).toBe(false);
+      for (const showWeekday of [false, true]) {
+        for (const showMonth of [false, true]) {
+          expect(menuBarLabel({ menuBarIcon: style, showWeekday, showMonth }, date).text).toBeNull();
+        }
+      }
+    }
+    expect(supportsDateParts("framed")).toBe(true);
+    expect(supportsDateParts("none")).toBe(true);
   });
 
   it("spells the date out for the framed glyph", () => {
