@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Calendo",
+  "version": "0.1.0",
+  "identifier": "com.webtiara.calendo",
+  "build": {
+    "frontendDist": "../dist/renderer",
+    "beforeBuildCommand": "pnpm build",
+    "beforeDevCommand": "pnpm build"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": ["../icons/icon.png", "../icons/icon.icns"],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "infoPlist": "Info.plist"
+    }
+  }
+}

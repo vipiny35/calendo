@@ -1,0 +1,25 @@
+{
+  "name": "calendo",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "A menu bar calendar for macOS.",
+  "packageManager": "pnpm@9.4.0",
+  "scripts": {
+    "build": "pnpm typecheck && node scripts/copy-static.mjs",
+    "app": "pnpm build && tauri dev",
+    "dmg": "tauri build --bundles dmg",
+    "test": "pnpm test:ui && pnpm test:rust",
+    "test:ui": "vitest run",
+    "test:rust": "cargo test --locked --manifest-path src-tauri/Cargo.toml",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "icon": "swift scripts/generate-icon.swift"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/node": "^26.4.1",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

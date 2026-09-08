@@ -1,0 +1,77 @@
+import type { AppSettings } from "../shared/settings";
+
+interface TauriGlobal {
+  core: { invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> };
+  event: {
+    listen<T>(
+      event: string,
+      handler: (message: { payload: T }) => void,
+    ): Promise<() => void>;
+  };
+}
+
+export type DesktopApi = {
+  getSettings: () => Promise<AppSettings>;
+  updateSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>;
+  setTrayTitle: (title: string) => Promise<void>;
+  hideCalendar: () => Promise<void>;
+  openSettings: () => Promise<void>;
+  quitApp: () => Promise<void>;
+  getAppVersion: () => Promise<string>;
+  onSettingsChanged: (listener: (settings: AppSettings) => void) => () => void;
+  onCalendarShown: (listener: () => void) => () => void;
+  onClockTick: (listener: () => void) => () => void;
+};
+
+function maybeTauri(): TauriGlobal | null {
+  return (window as unknown as { __TAURI__?: TauriGlobal }).__TAURI__ ?? null;
+}
+
+function tauri(): TauriGlobal {
+  const global = maybeTauri();
+  if (!global) {
+    throw new Error("Tauri bridge is unavailable.");
+  }
+  return global;
+}
+
+function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  return tauri().core.invoke<T>(command, args);
+}
+
+function subscribe<T>(event: string, handler: (payload: T) => void): () => void {
+  let unlisten: (() => void) | null = null;
+  let cancelled = false;
+
+  void tauri()
+    .event.listen<T>(event, (message) => handler(message.payload))
+    .then((stop) => {
+      if (cancelled) stop();
+      else unlisten = stop;
+    });
+
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
+}
+
+export const api: DesktopApi = {
+  getSettings: () => invoke<AppSettings>("get_settings"),
+  updateSettings: (patch) => invoke<AppSettings>("update_settings", { patch }),
+  setTrayTitle: (title) => invoke<void>("set_tray_title", { title }),
+  hideCalendar: () => invoke<void>("hide_calendar"),
+  openSettings: () => invoke<void>("open_settings"),
+  quitApp: () => invoke<void>("quit_app"),
+  getAppVersion: () => invoke<string>("app_version"),
+  onSettingsChanged: (listener) => subscribe<AppSettings>("settings-changed", listener),
+  onCalendarShown: (listener) => subscribe<void>("calendar-shown", listener),
+  onClockTick: (listener) => subscribe<void>("clock-tick", listener),
+};
+
+export function installTauriBridge(): DesktopApi {
+  if (!maybeTauri()) {
+    throw new Error("Tauri global is unavailable; the window cannot reach its host.");
+  }
+  return api;
+}

@@ -1,0 +1,16 @@
+node_modules/
+dist/
+release/
+__pycache__/
+.DS_Store
+*.log
+src-tauri/target/
+src-tauri/gen/schemas/
+
+.env
+.env.*
+*.key
+*.p8
+*.p12
+*.pfx
+*.mobileprovision

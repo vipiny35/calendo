@@ -1,0 +1,23 @@
+[package]
+name = "calendo"
+version = "0.1.0"
+description = "A menu bar calendar for macOS"
+authors = ["Vipin Yadav"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "calendo_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+objc2 = "0.6"
+window-vibrancy = "0.6"
