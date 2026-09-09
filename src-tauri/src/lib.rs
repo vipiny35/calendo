@@ -645,13 +645,13 @@ fn set_event_tray_label(app: AppHandle, title: Option<String>, image: Option<Vec
             let _ = tray.set_visible(false);
             return;
         }
+        let _ = tray.set_visible(true);
         if let Some(data) = image.as_deref() {
             if let Ok(icon) = tauri::image::Image::from_bytes(data) {
                 let _ = tray.set_icon_with_as_template(Some(icon), true);
             }
         }
         let _ = tray.set_title(title.as_deref());
-        let _ = tray.set_visible(true);
     });
 }
 

@@ -1,4 +1,4 @@
-import { eventTimeRange, type UpcomingEvent } from "../shared/events";
+import { eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/events";
 import { installTauriBridge } from "./host";
 
 const api = installTauriBridge();
@@ -18,9 +18,15 @@ function dayLabel(date: Date): string {
 async function load(): Promise<void> {
   const now = Date.now();
   try {
+    if (!(await api.getCalendarAccess())) {
+      summary.textContent = "Calendar access needed";
+      list.innerHTML = '<p class="empty">Allow Calendar access in Settings.</p>';
+      return;
+    }
     const events = await api.getCalendarEvents(now, now + 3 * 86_400_000);
     const upcoming = events.filter((event) => event.endAt > now);
-    summary.textContent = upcoming.length ? `${upcoming.length} upcoming event${upcoming.length === 1 ? "" : "s"}` : "Your schedule is clear";
+    const nextEvent = upcoming[0];
+    summary.textContent = nextEvent ? eventStatus(nextEvent, now).label.replace(/(\d+)([hm])/g, "$1 $2") : "No upcoming events";
     if (!upcoming.length) { list.innerHTML = '<p class="empty">No upcoming events.</p>'; return; }
     let currentDay = "";
     list.replaceChildren(...upcoming.map((event: UpcomingEvent) => {
@@ -32,6 +38,6 @@ async function load(): Promise<void> {
       const title = document.createElement("span"); title.className = "title"; title.textContent = event.title;
       item.append(dot, time, title); nodes.push(item); return nodes;
     }).flat());
-  } catch { summary.textContent = "Calendar access needed"; list.innerHTML = '<p class="empty">Allow Calendar access in Settings.</p>'; }
+  } catch (error) { summary.textContent = "Could not load events"; list.innerHTML = `<p class="empty">${error instanceof Error ? error.message : "Try again shortly."}</p>`; }
 }
 void load();

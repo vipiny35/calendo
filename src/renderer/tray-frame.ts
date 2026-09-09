@@ -76,13 +76,13 @@ export function framedGlyphMask(text: string): string {
 /** Slim rounded timer mark shown while an upcoming meeting countdown is active. */
 export function timerGlyphPng(): number[] {
   const canvas = document.createElement("canvas");
-  canvas.width = 10;
-  canvas.height = BOX;
+  canvas.width = 8;
+  canvas.height = 32;
   const ctx = canvas.getContext("2d");
   if (!ctx) return [];
   ctx.fillStyle = "#000";
   ctx.beginPath();
-  ctx.roundRect(3, 4, 4, 24, 2);
+  ctx.roundRect(0, 0, 8, 32, 4);
   ctx.fill();
   const encoded = canvas.toDataURL("image/png").split(",")[1] ?? "";
   const binary = atob(encoded);
