@@ -9,7 +9,7 @@
     "build": "pnpm typecheck && node scripts/copy-static.mjs",
     "app": "tauri build --debug --bundles app && open src-tauri/target/debug/bundle/macos/Calendo.app",
     "dev": "pnpm build && tauri dev",
-    "dmg": "tauri build --bundles dmg",
+    "dmg": "node scripts/release-dmg.mjs",
     "test": "pnpm test:ui && pnpm test:rust",
     "test:ui": "vitest run",
     "test:rust": "cargo test --locked --manifest-path src-tauri/Cargo.toml",

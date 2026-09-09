@@ -22,7 +22,19 @@ Look for Calendo in the menu bar.
 `pnpm dev` runs the unbundled executable with file watching for UI development.
 Use `pnpm app` when testing Calendar permissions.
 
-`pnpm dmg` produces a disk image under `src-tauri/target/release/bundle/dmg`.
+## Releases
+
+`pnpm dmg` produces a notarized disk image under
+`src-tauri/target/release/bundle/dmg`. It reads `.env.notarization`, which is
+gitignored and holds `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_PASSWORD` (an
+app-specific password) and `APPLE_SIGNING_IDENTITY`; exported variables win
+over the file, so CI can supply them as secrets. Without them the script stops
+rather than shipping an image Gatekeeper will refuse.
+
+Tauri notarizes and staples the `.app`, then wraps it in a disk image it never
+submits, so `scripts/release-dmg.mjs` submits and staples the image as well and
+ends on `spctl --assess`, which has to accept it. For a quick local build that
+skips all of this, run `pnpm tauri build --bundles dmg` directly.
 
 `pnpm icon` regenerates `icons/icon.png`, `icons/icon.icns`,
 `icons/tray-icon.png`, `icons/tray/calendar.png`, and
