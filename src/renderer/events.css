@@ -85,6 +85,7 @@ html, body {
   .event.interactive:hover .dot { opacity: 1; }
   /* A brand colour would fight the highlight, so marks borrow its ink. */
   .detail-row.interactive:hover .glyph svg { fill: currentColor; stroke: currentColor; }
+  .detail-row.interactive:hover .glyph img { filter: brightness(0) invert(1); }
 }
 .event.interactive,
 .detail-row.interactive,
@@ -143,7 +144,7 @@ html, body {
 .detail-row { padding-left: 10px; }
 .detail-row .glyph {
   display: flex;
-  flex: 0 0 16px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   color: var(--ink);
@@ -158,5 +159,6 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.glyph img { display: block; width: auto; height: 15px; max-width: 46px; }
 .detail-row.muted .label { color: var(--muted); }
 .empty { margin: 8px 8px; color: var(--muted); font-size: 13px; }

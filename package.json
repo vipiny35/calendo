@@ -24,7 +24,6 @@
     "vitest": "^5.0.0"
   },
   "dependencies": {
-    "lucide": "^1.43.0",
-    "simple-icons": "^16.30.0"
+    "lucide": "^1.43.0"
   }
 }
