@@ -24,10 +24,11 @@ html, body {
 .events-popover { height: 100%; padding: 8px 6px; color: var(--ink); }
 #list { height: 100%; overflow: auto; }
 .section-label {
-  margin: 10px 8px 3px;
+  margin: 18px 8px 6px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 400;
+  opacity: 0.72;
 }
 .section-label:first-child { margin-top: 0; }
 .event,
@@ -46,8 +47,22 @@ html, body {
   font: inherit;
   text-align: left;
 }
+/* AccentColor is the user's own highlight, the same one AppKit menus use. */
 .event.interactive:hover,
-.detail-row.interactive:hover { background: var(--hover); }
+.detail-row.interactive:hover {
+  background: var(--hover);
+}
+@supports (background: AccentColor) {
+  .event.interactive:hover,
+  .detail-row.interactive:hover {
+    background: AccentColor;
+    color: AccentColorText;
+  }
+  .event.interactive:hover .chevron,
+  .detail-row.interactive:hover .label,
+  .event.declined.interactive:hover .title { color: inherit; opacity: 1; }
+  .event.interactive:hover .dot { opacity: 1; }
+}
 .event.interactive,
 .detail-row.interactive { cursor: default; }
 /* Invitation answers follow the calendar convention: solid when accepted,
@@ -63,13 +78,13 @@ html, body {
 }
 .dot.tentative {
   background: repeating-linear-gradient(
-    45deg,
-    currentColor 0 1.5px,
-    transparent 1.5px 3px
+    135deg,
+    currentColor 0 2.2px,
+    transparent 2.2px 4.4px
   );
 }
 .dot.pending {
-  border: 1px dotted currentColor;
+  border: 1px dashed currentColor;
   background: transparent;
   opacity: 0.8;
 }

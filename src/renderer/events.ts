@@ -43,9 +43,16 @@ function sectionLabel(text: string): HTMLElement {
   return heading;
 }
 
+function openEvent(event: UpcomingEvent): void {
+  void api.openEvent(event.id);
+  void api.hideEvents();
+}
+
 function eventRow(event: UpcomingEvent, withCalendar = false): HTMLElement {
   const row = document.createElement("div");
   row.className = "event interactive";
+  row.setAttribute("role", "button");
+  row.addEventListener("click", () => openEvent(event));
   const dot = document.createElement("span");
   dot.className = `dot ${event.response}`;
   if (event.response === "declined") row.classList.add("declined");
@@ -89,7 +96,10 @@ function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
   details.className = "detail";
   if (event.joinUrl) {
     const url = event.joinUrl;
-    details.append(detailRow(lucideIcon(Video, 15), meetingLabel(url), () => void api.joinMeeting(url)));
+    details.append(detailRow(lucideIcon(Video, 15), meetingLabel(url), () => {
+      void api.joinMeeting(url);
+      void api.hideEvents();
+    }));
   }
   if (event.location && !event.location.startsWith("http")) {
     details.append(detailRow(lucideIcon(MapPin, 15), event.location));
@@ -102,9 +112,11 @@ function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
   chevron.append(lucideIcon(ChevronRight, 16));
   row.append(chevron);
   if (details.childElementCount) {
-    row.setAttribute("role", "button");
     row.setAttribute("aria-expanded", "true");
-    row.addEventListener("click", () => {
+    chevron.setAttribute("role", "button");
+    chevron.title = "Show meeting details";
+    chevron.addEventListener("click", (click) => {
+      click.stopPropagation();
       const expanded = row.getAttribute("aria-expanded") === "true";
       row.setAttribute("aria-expanded", expanded ? "false" : "true");
       details.hidden = expanded;

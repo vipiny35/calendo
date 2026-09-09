@@ -799,6 +799,11 @@ fn join_meeting(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_event(id: String) -> Result<(), String> {
+    events::open_event(&id)
+}
+
+#[tauri::command]
 fn app_version(app: AppHandle) -> String {
     app.package_info().version.to_string()
 }
@@ -878,6 +883,7 @@ pub fn run() {
             request_calendar_access,
             get_calendar_access,
             join_meeting,
+            open_event,
         ])
         .run(tauri::generate_context!())
         .expect("Calendo failed to start");

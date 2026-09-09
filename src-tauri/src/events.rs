@@ -73,6 +73,22 @@ pub(crate) fn can_fetch_events(status: isize, granted_this_session: bool) -> boo
     granted_this_session || access_granted(status)
 }
 
+/// Calendar apps claim `ical://ekevent`, so this reaches whichever one the
+/// user has set as default. Identifiers carry colons, which have to be
+/// escaped to stay inside one path segment.
+pub(crate) fn event_show_url(id: &str) -> String {
+    let mut escaped = String::with_capacity(id.len());
+    for byte in id.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                escaped.push(byte as char)
+            }
+            _ => escaped.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    format!("ical://ekevent/{escaped}?method=show&options=more")
+}
+
 pub(crate) const CALENDAR_PRIVACY_URLS: &[&str] = &[
     "x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_Calendars",
     "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Calendars",
@@ -82,8 +98,8 @@ pub(crate) const CALENDAR_PRIVACY_URLS: &[&str] = &[
 #[cfg(target_os = "macos")]
 mod macos {
     use super::{
-        access_action, access_granted, can_fetch_events, response_for, AccessAction, Response,
-        UpcomingEvent, CALENDAR_PRIVACY_URLS,
+        access_action, access_granted, can_fetch_events, event_show_url, response_for,
+        AccessAction, Response, UpcomingEvent, CALENDAR_PRIVACY_URLS,
     };
     use block2::RcBlock;
     use objc2::rc::{autoreleasepool, Retained};
@@ -361,6 +377,18 @@ mod macos {
         Ok(fetch_macos_range(start_ms, end_ms)?.into_iter().next())
     }
 
+    pub fn open_event(id: &str) -> Result<(), String> {
+        let string = NSString::from_str(&event_show_url(id));
+        let Some(url) = NSURL::URLWithString(&string) else {
+            return Err("Invalid event link".into());
+        };
+        if NSWorkspace::sharedWorkspace().openURL(&url) {
+            Ok(())
+        } else {
+            Err("Could not open the event in your calendar".into())
+        }
+    }
+
     pub fn open_meeting(url: &str) -> Result<(), String> {
         if !(url.starts_with("https://") || url.starts_with("http://")) {
             return Err("Meeting link must use http or https".into());
@@ -432,6 +460,20 @@ pub fn fetch_range(start_ms: i64, end_ms: i64) -> Result<Vec<UpcomingEvent>, Str
     }
 }
 
+pub fn open_event(id: &str) -> Result<(), String> {
+    if id.is_empty() {
+        return Err("This event has no identifier to open".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos::open_event(id)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Opening events is only supported on macOS".into())
+    }
+}
+
 pub fn open_meeting(url: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -447,8 +489,8 @@ pub fn open_meeting(url: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        access_action, access_granted, can_fetch_events, response_for, AccessAction, Response,
-        CALENDAR_PRIVACY_URLS,
+        access_action, access_granted, can_fetch_events, event_show_url, response_for,
+        AccessAction, Response, CALENDAR_PRIVACY_URLS,
     };
 
     #[test]
@@ -490,6 +532,16 @@ mod tests {
         assert!(CALENDAR_PRIVACY_URLS
             .iter()
             .any(|url| url.contains("preference.security")));
+    }
+
+    #[test]
+    fn event_links_escape_the_identifier() {
+        assert_eq!(
+            event_show_url("ABC-123"),
+            "ical://ekevent/ABC-123?method=show&options=more"
+        );
+        assert!(event_show_url("A1B2:C3D4").starts_with("ical://ekevent/A1B2%3AC3D4?"));
+        assert!(event_show_url("with space/slash").contains("with%20space%2Fslash"));
     }
 
     #[test]
