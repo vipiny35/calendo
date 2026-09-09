@@ -42,7 +42,7 @@ function openEvent(event: UpcomingEvent): void {
   void api.hideEvents();
 }
 
-function eventRow(event: UpcomingEvent, withCalendar = false): HTMLElement {
+function eventRow(event: UpcomingEvent): HTMLElement {
   const row = document.createElement("div");
   row.className = "event interactive";
   row.setAttribute("role", "button");
@@ -52,9 +52,7 @@ function eventRow(event: UpcomingEvent, withCalendar = false): HTMLElement {
   if (event.response === "declined") row.classList.add("declined");
   const title = document.createElement("span");
   title.className = "title";
-  const parts = [`${timeFormat.format(new Date(event.startAt))} · ${event.title}`];
-  if (withCalendar && event.calendar) parts.push(event.calendar);
-  title.textContent = parts.join(" · ");
+  title.textContent = `${timeFormat.format(new Date(event.startAt))} · ${event.title}`;
   const response = RESPONSE_LABEL[event.response];
   row.title = response ? `${title.textContent} — ${response}` : title.textContent;
   row.append(dot, title);
@@ -91,7 +89,7 @@ function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
   if (event.joinUrl) {
     const url = event.joinUrl;
     const { brand, label } = meetingBrand(url);
-    details.append(detailRow(meetingIcon(brand, 15), label, () => {
+    details.append(detailRow(meetingIcon(brand, 13), label, () => {
       void api.joinMeeting(url);
       void api.hideEvents();
     }));
@@ -100,7 +98,7 @@ function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
     details.append(detailRow(lucideIcon(MapPin, 15), event.location));
   }
 
-  const row = eventRow(event, true);
+  const row = eventRow(event);
   row.classList.add("featured");
   nodes.push(row);
   if (details.childElementCount) nodes.push(details);

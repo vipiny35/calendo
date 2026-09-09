@@ -82,10 +82,9 @@ html, body {
   .detail-row.interactive:hover .label,
   .detail-row.interactive:hover .glyph svg,
   .event.declined.interactive:hover .title { color: inherit; opacity: 1; }
-  .event.interactive:hover .dot { opacity: 1; }
-  /* A brand colour would fight the highlight, so marks borrow its ink. */
+  /* Only the plain camera follows the highlight; a service's own mark keeps
+     its colours, and the answer markers keep theirs. */
   .detail-row.interactive:hover .glyph svg { fill: currentColor; stroke: currentColor; }
-  .detail-row.interactive:hover .glyph img { filter: brightness(0) invert(1); }
 }
 .event.interactive,
 .detail-row.interactive,
@@ -98,21 +97,21 @@ html, body {
   height: 15px;
   flex: 0 0 4px;
   border-radius: 2px;
-  background: currentColor;
+  background: var(--ink);
   opacity: 0.85;
 }
 .dot.tentative {
   background: repeating-linear-gradient(
     135deg,
-    currentColor 0 2.2px,
+    var(--ink) 0 2.2px,
     transparent 2.2px 4.4px
   );
 }
-/* A stroked capsule, masked so it takes currentColor: a per-edge CSS border
+/* A stroked capsule, masked so it takes the marker ink: a per-edge CSS border
    breaks the dash rhythm at the corners, an SVG path carries it around. The
    dasharray divides the 31.4px perimeter into eight even dashes. */
 .dot.pending {
-  background: currentColor;
+  background: var(--ink);
   opacity: 0.8;
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 15'%3E%3Crect x='.5' y='.5' width='3' height='14' rx='1.5' fill='none' stroke='black' stroke-width='1' stroke-dasharray='2.2 1.73'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 15'%3E%3Crect x='.5' y='.5' width='3' height='14' rx='1.5' fill='none' stroke='black' stroke-width='1' stroke-dasharray='2.2 1.73'/%3E%3C/svg%3E");
@@ -123,7 +122,7 @@ html, body {
 }
 .dot.declined {
   background: transparent;
-  box-shadow: inset 0 0 0 1px currentColor;
+  box-shadow: inset 0 0 0 1px var(--ink);
   opacity: 0.45;
 }
 .event.declined .title {
@@ -159,6 +158,6 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.glyph img { display: block; width: auto; height: 15px; max-width: 46px; }
+.glyph img { display: block; width: auto; height: 13px; max-width: 40px; }
 .detail-row.muted .label { color: var(--muted); }
 .empty { margin: 8px 8px; color: var(--muted); font-size: 13px; }
