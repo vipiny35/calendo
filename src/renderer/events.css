@@ -89,7 +89,9 @@ html, body {
   .detail-row.interactive:hover,
   .menu-row:hover {
     background: AccentColor;
-    color: AccentColorText;
+    /* AccentColorText resolves to black in this WebKit, which reads as ink
+       spilled over the highlight; AppKit paints menu highlights white. */
+    color: #fff;
   }
   .detail-row.interactive:hover .label,
   .detail-row.interactive:hover .glyph svg,
