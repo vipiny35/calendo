@@ -3,6 +3,7 @@ import { installTauriBridge } from "./host";
 import { lucideIcon } from "./icons";
 import { meetingBrand } from "../shared/meetings";
 import { meetingIcon } from "./brand-icons";
+import { popoverHeight } from "./popover-size";
 import { MapPin } from "lucide";
 
 const api = installTauriBridge();
@@ -60,7 +61,7 @@ function eventRow(event: UpcomingEvent, withCalendar = false): HTMLElement {
   return row;
 }
 
-function detailRow(icon: SVGElement | null, text: string, onClick?: () => void): HTMLElement {
+function detailRow(icon: Element | null, text: string, onClick?: () => void): HTMLElement {
   const row = document.createElement(onClick ? "button" : "div") as HTMLElement;
   row.className = onClick ? "detail-row interactive" : "detail-row muted";
   const glyph = document.createElement("span");
@@ -107,10 +108,8 @@ function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
 }
 
 function syncHeight(): void {
-  const height = list.scrollHeight;
-  if (!height) return;
-  const footer = document.querySelector<HTMLElement>(".footer");
-  void api.setEventsHeight(height + (footer?.offsetHeight ?? 0) + 16);
+  const height = popoverHeight(list);
+  if (height) void api.setEventsHeight(height);
 }
 
 let loadRevision = 0;
