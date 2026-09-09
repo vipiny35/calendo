@@ -143,10 +143,17 @@ fn close_events(app: &AppHandle) {
     set_status_item_highlight(app, EVENT_TRAY_ID, false);
 }
 
+/// AppKit answers only on the main thread, and blur handling reaches this from
+/// a timer thread, where a marker cannot be had and the call would be dropped.
 #[cfg(target_os = "macos")]
 fn set_status_item_highlight(app: &AppHandle, id: &str, highlighted: bool) {
     use objc2_foundation::MainThreadMarker;
-    if let Some(tray) = app.tray_by_id(id) {
+    let id = id.to_string();
+    let handle = app.clone();
+    let _ = app.clone().run_on_main_thread(move || {
+        let Some(tray) = handle.tray_by_id(&id) else {
+            return;
+        };
         let _ = tray.with_inner_tray_icon(move |inner| {
             let Some(item) = inner.ns_status_item() else { return; };
             let Some(mtm) = MainThreadMarker::new() else { return; };
@@ -154,7 +161,7 @@ fn set_status_item_highlight(app: &AppHandle, id: &str, highlighted: bool) {
                 button.setHighlighted(highlighted);
             }
         });
-    }
+    });
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -529,8 +536,10 @@ fn build_calendar_window(app: &AppHandle) -> tauri::Result<()> {
                 if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
                     let focused = window.is_focused().unwrap_or(false);
                     let visible = window.is_visible().unwrap_or(false);
+                    // Hiding the window alone leaves the status item lit and
+                    // the renderer thinking the popover is still open.
                     if visible && !focused {
-                        let _ = window.hide();
+                        close_calendar(&app);
                     }
                 }
             });
