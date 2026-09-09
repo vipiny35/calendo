@@ -31,8 +31,10 @@ html, body {
   color: var(--ink);
 }
 /* The list gives way first, so the footer stays put once the popover is
-   taller than the screen allows. */
+   taller than the screen allows. The window grows with its content, so a
+   scrollbar would only ever show on a day too long for the screen. */
 #list { min-height: 0; flex: 1 1 auto; overflow: auto; }
+#list::-webkit-scrollbar { display: none; }
 .footer {
   flex: 0 0 auto;
   margin: 7px 0 0;
@@ -42,7 +44,7 @@ html, body {
 .section-label {
   margin: 18px 8px 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   opacity: 0.72;
 }
@@ -103,10 +105,18 @@ html, body {
     transparent 2.2px 4.4px
   );
 }
+/* A stroked capsule, masked so it takes currentColor: a per-edge CSS border
+   breaks the dash rhythm at the corners, an SVG path carries it around. The
+   dasharray divides the 31.4px perimeter into eight even dashes. */
 .dot.pending {
-  border: 1px dashed currentColor;
-  background: transparent;
+  background: currentColor;
   opacity: 0.8;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 15'%3E%3Crect x='.5' y='.5' width='3' height='14' rx='1.5' fill='none' stroke='black' stroke-width='1' stroke-dasharray='2.2 1.73'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 15'%3E%3Crect x='.5' y='.5' width='3' height='14' rx='1.5' fill='none' stroke='black' stroke-width='1' stroke-dasharray='2.2 1.73'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
 }
 .dot.declined {
   background: transparent;

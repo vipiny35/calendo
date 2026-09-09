@@ -26,7 +26,10 @@ const CALENDAR_LABEL: &str = "calendar";
 const EVENTS_LABEL: &str = "events";
 const EVENTS_WIDTH: f64 = 430.0;
 const EVENTS_MIN_HEIGHT: f64 = 92.0;
-const EVENTS_MAX_HEIGHT: f64 = 620.0;
+/** Share of the screen the popover may fill before its list scrolls. */
+const EVENTS_SCREEN_SHARE: f64 = 0.9;
+/** Stands in when the monitor cannot be read. */
+const EVENTS_FALLBACK_SCREEN: f64 = 800.0;
 const SETTINGS_LABEL: &str = "settings";
 const TRAY_ID: &str = "calendo";
 const EVENT_TRAY_ID: &str = "calendo-event";
@@ -694,12 +697,26 @@ fn hide_events(app: AppHandle) {
 }
 
 /// The popover grows with its content instead of scrolling a fixed frame,
-/// up to a height that still fits under the menu bar.
-fn events_height(content: f64) -> f64 {
+/// up to most of the screen it sits on.
+fn events_height(content: f64, screen: f64) -> f64 {
     if !content.is_finite() {
         return EVENTS_MIN_HEIGHT;
     }
-    content.clamp(EVENTS_MIN_HEIGHT, EVENTS_MAX_HEIGHT)
+    let ceiling = (screen * EVENTS_SCREEN_SHARE).max(EVENTS_MIN_HEIGHT);
+    content.clamp(EVENTS_MIN_HEIGHT, ceiling)
+}
+
+fn screen_height(window: &WebviewWindow) -> f64 {
+    window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .map(|monitor| {
+            let scale = monitor.scale_factor();
+            monitor.size().to_logical::<f64>(scale).height
+        })
+        .filter(|height| height.is_finite() && *height > 0.0)
+        .unwrap_or(EVENTS_FALLBACK_SCREEN)
 }
 
 #[tauri::command]
@@ -707,9 +724,10 @@ fn set_events_height(app: AppHandle, height: f64) {
     let Some(window) = app.get_webview_window(EVENTS_LABEL) else {
         return;
     };
+    let ceiling = screen_height(&window);
     let _ = window.set_size(Size::Logical(LogicalSize::new(
         EVENTS_WIDTH,
-        events_height(height),
+        events_height(height, ceiling),
     )));
 }
 
@@ -895,10 +913,13 @@ mod tests {
 
     #[test]
     fn events_popover_grows_with_content_within_bounds() {
-        assert_eq!(events_height(40.0), EVENTS_MIN_HEIGHT);
-        assert_eq!(events_height(300.0), 300.0);
-        assert_eq!(events_height(2000.0), EVENTS_MAX_HEIGHT);
-        assert_eq!(events_height(f64::NAN), EVENTS_MIN_HEIGHT);
+        assert_eq!(events_height(40.0, 982.0), EVENTS_MIN_HEIGHT);
+        assert_eq!(events_height(300.0, 982.0), 300.0);
+        assert_eq!(events_height(2000.0, 982.0), 982.0 * EVENTS_SCREEN_SHARE);
+        assert_eq!(events_height(700.0, 600.0), 600.0 * EVENTS_SCREEN_SHARE);
+        assert_eq!(events_height(f64::NAN, 982.0), EVENTS_MIN_HEIGHT);
+        // A screen too short for the minimum still yields a usable window.
+        assert_eq!(events_height(400.0, 50.0), EVENTS_MIN_HEIGHT);
     }
 
     // Retina laptop below a 1× external, matching a typical arrangement:
