@@ -14,6 +14,7 @@ import { installTauriBridge, type DesktopApi } from "./host";
 import { lucideIcon } from "./icons";
 import { framedGlyphMask } from "./tray-frame";
 import { Check, Volume2 } from "lucide";
+import { bindCalendarAccess } from "./calendar-access";
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -101,6 +102,10 @@ function startSettings(api: DesktopApi): void {
   const login = requireElement<HTMLInputElement>("login");
   const beep = requireElement<HTMLInputElement>("beep");
   const autoUpdate = requireElement<HTMLInputElement>("auto-update");
+  const showUpcoming = requireElement<HTMLInputElement>("show-upcoming");
+  const calendarAccessStatus = requireElement<HTMLParagraphElement>("calendar-access-status");
+  const calendarAccess = requireElement<HTMLButtonElement>("calendar-access");
+  const calendarAccessRow = requireElement<HTMLElement>("calendar-access-row");
   const beepPreview = requireElement<HTMLButtonElement>("beep-preview");
   const theme = requireElement<HTMLSelectElement>("theme");
   const version = requireElement<HTMLParagraphElement>("version");
@@ -172,6 +177,7 @@ function startSettings(api: DesktopApi): void {
     login.checked = settings.launchAtLogin;
     beep.checked = settings.beepOnTheHour;
     autoUpdate.checked = settings.autoUpdate;
+    showUpcoming.checked = settings.showUpcomingEvent;
     theme.value = settings.theme;
   };
 
@@ -184,6 +190,7 @@ function startSettings(api: DesktopApi): void {
     launchAtLogin: login.checked,
     beepOnTheHour: beep.checked,
     autoUpdate: autoUpdate.checked,
+    showUpcomingEvent: showUpcoming.checked,
     theme: theme.value as Theme,
   });
 
@@ -209,6 +216,17 @@ function startSettings(api: DesktopApi): void {
     const patch = patchFromForm();
     applyTheme(patch.theme ?? "system");
     void api.updateSettings(patch);
+  });
+
+  const refreshCalendarAccess = bindCalendarAccess(api, {
+    status: calendarAccessStatus,
+    button: calendarAccess,
+    row: calendarAccessRow,
+    toggle: showUpcoming,
+  });
+  window.addEventListener("focus", () => void refreshCalendarAccess());
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) void refreshCalendarAccess();
   });
 
   iconStyles.addEventListener("click", (event) => {
@@ -252,6 +270,7 @@ function startSettings(api: DesktopApi): void {
   void api.getSettings().then((settings) => {
     paint(settings);
     if (settings.autoUpdate) void checkForUpdates();
+    void refreshCalendarAccess();
   });
   void api.getAppVersion().then((value) => {
     version.textContent = value;

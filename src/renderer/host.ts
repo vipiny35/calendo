@@ -1,4 +1,5 @@
 import type { AppSettings } from "../shared/settings";
+import type { UpcomingEvent } from "../shared/events";
 
 interface TauriGlobal {
   core: { invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> };
@@ -16,18 +17,29 @@ export type DesktopApi = {
   setTrayLabel: (
     title: string | null,
     iconDay: number | null,
-    style: AppSettings["menuBarIcon"],
+    style: AppSettings["menuBarIcon"] | "timer",
     image: number[] | null,
   ) => Promise<void>;
+  setEventTrayLabel: (title: string | null, image: number[] | null, visible: boolean) => Promise<void>;
   beep: () => Promise<void>;
+  getUpcomingEvent: () => Promise<UpcomingEvent | null>;
+  getCalendarEvents: (startAt: number, endAt: number) => Promise<UpcomingEvent[]>;
+  requestCalendarAccess: () => Promise<boolean>;
+  getCalendarAccess: () => Promise<boolean>;
+  joinMeeting: (url: string) => Promise<void>;
+  openEvent: (id: string) => Promise<void>;
   checkForUpdates: () => Promise<string>;
   hideCalendar: () => Promise<void>;
+  hideEvents: () => Promise<void>;
+  setEventsHeight: (height: number) => Promise<void>;
   setCalendarPinned: (pinned: boolean) => Promise<void>;
   openSettings: () => Promise<void>;
   quitApp: () => Promise<void>;
   getAppVersion: () => Promise<string>;
   onSettingsChanged: (listener: (settings: AppSettings) => void) => () => void;
   onCalendarShown: (listener: () => void) => () => void;
+  onEventsShown: (listener: () => void) => () => void;
+  onCalendarHidden: (listener: () => void) => () => void;
   onClockTick: (listener: () => void) => () => void;
 };
 
@@ -69,15 +81,28 @@ export const api: DesktopApi = {
   updateSettings: (patch) => invoke<AppSettings>("update_settings", { patch }),
   setTrayLabel: (title, iconDay, style, image) =>
     invoke<void>("set_tray_label", { title, iconDay, style, image }),
+  setEventTrayLabel: (title, image, visible) =>
+    invoke<void>("set_event_tray_label", { title, image, visible }),
   beep: () => invoke<void>("beep"),
+  getUpcomingEvent: () => invoke<UpcomingEvent | null>("get_upcoming_event"),
+  getCalendarEvents: (startAt, endAt) =>
+    invoke<UpcomingEvent[]>("get_calendar_events", { startAt, endAt }),
+  requestCalendarAccess: () => invoke<boolean>("request_calendar_access"),
+  getCalendarAccess: () => invoke<boolean>("get_calendar_access"),
+  joinMeeting: (url) => invoke<void>("join_meeting", { url }),
+  openEvent: (id) => invoke<void>("open_event", { id }),
   checkForUpdates: () => invoke<string>("check_for_updates"),
   hideCalendar: () => invoke<void>("hide_calendar"),
+  hideEvents: () => invoke<void>("hide_events"),
+  setEventsHeight: (height) => invoke<void>("set_events_height", { height }),
   setCalendarPinned: (pinned) => invoke<void>("set_calendar_pinned", { pinned }),
   openSettings: () => invoke<void>("open_settings"),
   quitApp: () => invoke<void>("quit_app"),
   getAppVersion: () => invoke<string>("app_version"),
   onSettingsChanged: (listener) => subscribe<AppSettings>("settings-changed", listener),
   onCalendarShown: (listener) => subscribe<void>("calendar-shown", listener),
+  onEventsShown: (listener) => subscribe<void>("events-shown", listener),
+  onCalendarHidden: (listener) => subscribe<void>("calendar-hidden", listener),
   onClockTick: (listener) => subscribe<void>("clock-tick", listener),
 };
 

@@ -72,3 +72,59 @@ export function framedGlyphPng(text: string): number[] {
 export function framedGlyphMask(text: string): string {
   return `url("${draw(text).toDataURL("image/png")}")`;
 }
+
+/**
+ * The tray scales every status image to 18pt tall, so a 36px box is exactly
+ * 2x and lands on retina pixels 1:1. Every measure below is in those pixels
+ * and reads at half its value in points.
+ */
+const EVENT_BOX = 36;
+/** Slim rounded mark that leads the countdown. */
+const PILL_WIDTH = 8;
+const PILL_HEIGHT = 32;
+/** Transparent run between the mark and the countdown. */
+const PILL_GAP = 13;
+/** 13pt once scaled, matching a native title, a shade heavier than regular. */
+const EVENT_FONT = '500 26px -apple-system, "SF Pro Text", system-ui, sans-serif';
+
+function measure(font: string, text: string): number {
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return 0;
+  ctx.font = font;
+  return ctx.measureText(text).width;
+}
+
+/**
+ * Mark plus countdown in one template image. Drawing the text ourselves buys
+ * the gap and the weight that a native status item title cannot express, and
+ * the template alpha still tints and inverts with the menu bar.
+ */
+export function eventGlyphPng(text: string): number[] {
+  const canvas = document.createElement("canvas");
+  canvas.height = EVENT_BOX;
+  canvas.width = text
+    ? Math.ceil(PILL_WIDTH + PILL_GAP + measure(EVENT_FONT, text) + 2)
+    : PILL_WIDTH;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return [];
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.roundRect(
+    0,
+    (EVENT_BOX - PILL_HEIGHT) / 2,
+    PILL_WIDTH,
+    PILL_HEIGHT,
+    PILL_WIDTH / 2,
+  );
+  ctx.fill();
+  if (text) {
+    ctx.font = EVENT_FONT;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, PILL_WIDTH + PILL_GAP, EVENT_BOX / 2);
+  }
+  const encoded = canvas.toDataURL("image/png").split(",")[1] ?? "";
+  const binary = atob(encoded);
+  return Array.from(binary, (character) => character.charCodeAt(0));
+}

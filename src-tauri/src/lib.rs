@@ -5,6 +5,7 @@
 
 mod glass;
 mod beep;
+mod events;
 mod settings;
 
 use settings::{AppSettings, SettingsStore};
@@ -22,8 +23,17 @@ use tauri::{
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 
 const CALENDAR_LABEL: &str = "calendar";
+const EVENTS_LABEL: &str = "events";
+const EVENTS_WIDTH: f64 = 430.0;
+const EVENTS_MIN_HEIGHT: f64 = 92.0;
+/** Share of the screen the popover may fill before its list scrolls. Past
+    1.0 the surplus hangs below the display, so the list still scrolls there. */
+const EVENTS_SCREEN_SHARE: f64 = 1.8;
+/** Stands in when the monitor cannot be read. */
+const EVENTS_FALLBACK_SCREEN: f64 = 800.0;
 const SETTINGS_LABEL: &str = "settings";
 const TRAY_ID: &str = "calendo";
+const EVENT_TRAY_ID: &str = "calendo-event";
 const AUTOSTART_ARG: &str = "--autostart";
 const CALENDAR_WIDTH: f64 = 288.0;
 const CALENDAR_WIDTH_WEEKS: f64 = 312.0;
@@ -113,19 +123,37 @@ fn set_launch_at_login(app: &AppHandle, enabled: bool) {
     };
 }
 
-fn show_week_numbers(app: &AppHandle) -> bool {
-    app.state::<AppState>()
-        .settings
-        .lock()
-        .map(|store| store.value().show_week_numbers)
-        .unwrap_or(false)
-}
-
 fn close_calendar(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
         let _ = window.hide();
+        let _ = app.emit("calendar-hidden", ());
+    }
+    set_status_item_highlight(app, TRAY_ID, false);
+}
+
+fn close_events(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(EVENTS_LABEL) {
+        let _ = window.hide();
+    }
+    set_status_item_highlight(app, EVENT_TRAY_ID, false);
+}
+
+#[cfg(target_os = "macos")]
+fn set_status_item_highlight(app: &AppHandle, id: &str, highlighted: bool) {
+    use objc2_foundation::MainThreadMarker;
+    if let Some(tray) = app.tray_by_id(id) {
+        let _ = tray.with_inner_tray_icon(move |inner| {
+            let Some(item) = inner.ns_status_item() else { return; };
+            let Some(mtm) = MainThreadMarker::new() else { return; };
+            if let Some(button) = item.button(mtm) {
+                button.setHighlighted(highlighted);
+            }
+        });
     }
 }
+
+#[cfg(not(target_os = "macos"))]
+fn set_status_item_highlight(_app: &AppHandle, _id: &str, _highlighted: bool) {}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct ScreenBounds {
@@ -153,11 +181,8 @@ enum PopoverPlacement {
     Above,
 }
 
-fn calendar_window_size(show_week_numbers: bool) -> (f64, f64) {
-    (
-        calendar_width(show_week_numbers),
-        CALENDAR_HEIGHT + glass::CARET_HEIGHT,
-    )
+fn calendar_window_size(show_week_numbers: bool, _show_upcoming_event: bool) -> (f64, f64) {
+    (calendar_width(show_week_numbers), CALENDAR_HEIGHT)
 }
 
 fn window_theme(theme: &str) -> Option<Theme> {
@@ -184,6 +209,7 @@ fn apply_app_theme(app: &AppHandle, theme: &str) {
 
 /// Distance from the window's left edge to the caret tip, so the triangle
 /// still points at the menu bar icon after the window is clamped to the screen.
+#[cfg(test)]
 fn caret_offset(window_x: f64, window_w: f64, tray_x: f64, tray_w: f64) -> f64 {
     const INSET: f64 = 22.0;
     let center = tray_x + tray_w / 2.0 - window_x;
@@ -191,18 +217,6 @@ fn caret_offset(window_x: f64, window_w: f64, tray_x: f64, tray_w: f64) -> f64 {
         return window_w / 2.0;
     }
     center.clamp(INSET, window_w - INSET)
-}
-
-fn sync_caret(window: &WebviewWindow, offset: f64, placement: PopoverPlacement) {
-    let side = match placement {
-        PopoverPlacement::Below => "below",
-        PopoverPlacement::Above => "above",
-    };
-    let _ = window.eval(format!(
-        "document.documentElement.style.setProperty('--caret-x','{offset:.1}px');\
-         var shell=document.querySelector('.shell');\
-         if(shell)shell.setAttribute('data-placement','{side}');"
-    ));
 }
 
 /// Top-left of the popover, in the same coordinate space as the tray and screen.
@@ -215,7 +229,7 @@ fn popover_origin(
     win_h: f64,
     screen: ScreenBounds,
 ) -> (f64, f64, PopoverPlacement) {
-    const GAP: f64 = 2.0;
+    const GAP: f64 = 0.0;
     const PAD: f64 = 8.0;
     let mut x = tray_x + tray_w / 2.0 - win_w / 2.0;
     let mut y = tray_y + tray_h + GAP;
@@ -237,7 +251,15 @@ fn position_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
     let Some(window) = app.get_webview_window(CALENDAR_LABEL) else {
         return;
     };
-    let (width, height) = calendar_window_size(show_week_numbers(app));
+    let (width, height) = app
+        .state::<AppState>()
+        .settings
+        .lock()
+        .map(|store| {
+            let settings = store.value();
+            calendar_window_size(settings.show_week_numbers, settings.show_upcoming_event)
+        })
+        .unwrap_or_else(|_| calendar_window_size(false, false));
     let fallback_scale = window.scale_factor().unwrap_or(1.0);
     // Tray events already carry physical pixels, converted with the status
     // item's own scale. The hidden window often still sits on the primary
@@ -288,16 +310,16 @@ fn position_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
             width: width.max(tray_w),
             height: height.max(tray_h),
         });
-    let (x, y, placement) = popover_origin(tray_x, tray_y, tray_w, tray_h, width, height, screen);
+    let (x, y, _placement) = popover_origin(tray_x, tray_y, tray_w, tray_h, width, height, screen);
 
     let _ = window.set_size(Size::Logical(LogicalSize::new(width, height)));
     // Logical points, not physical: set_position converts physical coords with
     // the *window's* current scale, which is still the other display's.
     let _ = window.set_position(Position::Logical(LogicalPosition::new(x, y)));
-    sync_caret(&window, caret_offset(x, width, tray_x, tray_w), placement);
 }
 
 fn show_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
+    close_events(app);
     position_calendar(app, tray_rect);
     if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
         let _ = window.show();
@@ -305,6 +327,7 @@ fn show_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
         position_calendar(app, tray_rect);
         let _ = window.set_focus();
     }
+    set_status_item_highlight(app, TRAY_ID, true);
     let _ = app.emit("calendar-shown", ());
 }
 
@@ -323,8 +346,33 @@ fn toggle_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
     show_calendar(app, tray_rect);
 }
 
+fn show_events(app: &AppHandle, tray_rect: tauri::Rect) {
+    close_calendar(app);
+    let Some(window) = app.get_webview_window(EVENTS_LABEL) else { return; };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let pos: LogicalPosition<f64> = tray_rect.position.to_logical(scale);
+    let size: tauri::LogicalSize<f64> = tray_rect.size.to_logical(scale);
+    let _ = window.set_position(Position::Logical(LogicalPosition::new(
+        pos.x + size.width / 2.0 - EVENTS_WIDTH / 2.0,
+        pos.y + size.height,
+    )));
+    let _ = window.show();
+    let _ = window.set_focus();
+    set_status_item_highlight(app, EVENT_TRAY_ID, true);
+    let _ = window.emit("events-shown", ());
+}
+
+fn toggle_events(app: &AppHandle, tray_rect: tauri::Rect) {
+    let visible = app
+        .get_webview_window(EVENTS_LABEL)
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false);
+    if visible { close_events(app); } else { show_events(app, tray_rect); }
+}
+
 fn present_settings(app: &AppHandle) {
     close_calendar(app);
+    close_events(app);
     let _ = app.set_activation_policy(ActivationPolicy::Regular);
     if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
         let _ = window.unminimize();
@@ -384,14 +432,40 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+    let event_tray = TrayIconBuilder::with_id(EVENT_TRAY_ID)
+        .tooltip("Upcoming event")
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                rect,
+                ..
+            } = event
+            {
+                toggle_events(tray.app_handle(), rect);
+            }
+        })
+        .build(app)?;
+    let _ = event_tray.set_visible(false);
     Ok(())
 }
 
 fn build_calendar_window(app: &AppHandle) -> tauri::Result<()> {
+    let initial = app
+        .state::<AppState>()
+        .settings
+        .lock()
+        .map(|store| store.value())
+        .unwrap_or_default();
+    let (initial_width, initial_height) = calendar_window_size(
+        initial.show_week_numbers,
+        initial.show_upcoming_event,
+    );
     let window =
         WebviewWindowBuilder::new(app, CALENDAR_LABEL, WebviewUrl::App("calendar.html".into()))
             .title("Calendo")
-            .inner_size(CALENDAR_WIDTH, CALENDAR_HEIGHT + glass::CARET_HEIGHT)
+            .inner_size(initial_width, initial_height)
             .decorations(false)
             .transparent(true)
             .shadow(true)
@@ -438,6 +512,34 @@ fn build_calendar_window(app: &AppHandle) -> tauri::Result<()> {
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
             close_calendar(&handle);
+        }
+        _ => {}
+    });
+    Ok(())
+}
+
+fn build_events_window(app: &AppHandle) -> tauri::Result<()> {
+    let window = WebviewWindowBuilder::new(app, EVENTS_LABEL, WebviewUrl::App("events.html".into()))
+        .title("Upcoming Events")
+        .inner_size(EVENTS_WIDTH, EVENTS_MIN_HEIGHT)
+        .decorations(false)
+        .transparent(true)
+        .shadow(true)
+        .resizable(false)
+        .always_on_top(true)
+        .visible_on_all_workspaces(true)
+        .skip_taskbar(true)
+        .accept_first_mouse(true)
+        .visible(false)
+        .focused(false)
+        .build()?;
+    glass::apply_calendar_glass(&window);
+    let handle = app.clone();
+    window.on_window_event(move |event| match event {
+        WindowEvent::Focused(false) => close_events(&handle),
+        WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            close_events(&handle);
         }
         _ => {}
     });
@@ -495,10 +597,15 @@ fn update_settings(
     if saved.launch_at_login != previous.launch_at_login {
         set_launch_at_login(&app, saved.launch_at_login);
     }
-    if saved.show_week_numbers != previous.show_week_numbers {
+    if saved.show_week_numbers != previous.show_week_numbers
+        || saved.show_upcoming_event != previous.show_upcoming_event
+    {
         if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
             if window.is_visible().unwrap_or(false) {
-                let (width, height) = calendar_window_size(saved.show_week_numbers);
+                let (width, height) = calendar_window_size(
+                    saved.show_week_numbers,
+                    saved.show_upcoming_event,
+                );
                 let _ = window.set_size(Size::Logical(LogicalSize::new(width, height)));
             }
         }
@@ -528,16 +635,13 @@ fn set_tray_label(
             return;
         };
         // On macOS, set_title(None) leaves the previous native title intact.
-        // Explicitly clear it for every glyph style when leaving plain text.
-        let text = if style == "none" {
-            title.as_deref().unwrap_or("")
-        } else {
-            ""
-        };
+        // Always write an explicit value so event status text clears reliably.
+        let text = title.as_deref().unwrap_or("");
         let _ = tray.set_title(Some(text));
         let bytes: Option<&[u8]> = match style.as_str() {
             "none" => None,
             "framed" => image.as_deref(),
+            "timer" => image.as_deref(),
             "calendar" => Some(TRAY_CALENDAR),
             _ => icon_day
                 .filter(|day| (1..=31).contains(day))
@@ -549,6 +653,24 @@ fn set_tray_label(
         if showing {
             let _ = tray.set_icon_as_template(true);
         }
+    });
+}
+
+#[tauri::command]
+fn set_event_tray_label(app: AppHandle, title: Option<String>, image: Option<Vec<u8>>, visible: bool) {
+    let _ = app.clone().run_on_main_thread(move || {
+        let Some(tray) = app.tray_by_id(EVENT_TRAY_ID) else { return; };
+        if !visible {
+            let _ = tray.set_visible(false);
+            return;
+        }
+        let _ = tray.set_visible(true);
+        if let Some(data) = image.as_deref() {
+            if let Ok(icon) = tauri::image::Image::from_bytes(data) {
+                let _ = tray.set_icon_with_as_template(Some(icon), true);
+            }
+        }
+        let _ = tray.set_title(title.as_deref());
     });
 }
 
@@ -571,6 +693,46 @@ fn hide_calendar(app: AppHandle) {
 }
 
 #[tauri::command]
+fn hide_events(app: AppHandle) {
+    close_events(&app);
+}
+
+/// The popover grows with its content instead of scrolling a fixed frame,
+/// up to most of the screen it sits on.
+fn events_height(content: f64, screen: f64) -> f64 {
+    if !content.is_finite() {
+        return EVENTS_MIN_HEIGHT;
+    }
+    let ceiling = (screen * EVENTS_SCREEN_SHARE).max(EVENTS_MIN_HEIGHT);
+    content.clamp(EVENTS_MIN_HEIGHT, ceiling)
+}
+
+fn screen_height(window: &WebviewWindow) -> f64 {
+    window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .map(|monitor| {
+            let scale = monitor.scale_factor();
+            monitor.size().to_logical::<f64>(scale).height
+        })
+        .filter(|height| height.is_finite() && *height > 0.0)
+        .unwrap_or(EVENTS_FALLBACK_SCREEN)
+}
+
+#[tauri::command]
+fn set_events_height(app: AppHandle, height: f64) {
+    let Some(window) = app.get_webview_window(EVENTS_LABEL) else {
+        return;
+    };
+    let ceiling = screen_height(&window);
+    let _ = window.set_size(Size::Logical(LogicalSize::new(
+        EVENTS_WIDTH,
+        events_height(height, ceiling),
+    )));
+}
+
+#[tauri::command]
 fn set_calendar_pinned(state: State<AppState>, pinned: bool) {
     state.calendar_pinned.store(pinned, Ordering::SeqCst);
 }
@@ -583,6 +745,81 @@ fn open_settings(app: AppHandle) {
 #[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0);
+}
+
+fn on_main<T, F>(app: &AppHandle, work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.run_on_main_thread(move || {
+        let _ = sender.send(work());
+    })
+    .map_err(|error| error.to_string())?;
+    receiver.recv().map_err(|error| error.to_string())
+}
+
+async fn on_main_async<T, F>(app: AppHandle, work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || on_main(&app, work))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn get_upcoming_event(app: AppHandle) -> Result<Option<events::UpcomingEvent>, String> {
+    on_main_async(app, events::fetch_upcoming).await?
+}
+
+#[tauri::command]
+async fn get_calendar_events(
+    app: AppHandle,
+    start_at: i64,
+    end_at: i64,
+) -> Result<Vec<events::UpcomingEvent>, String> {
+    on_main_async(app, move || events::fetch_range(start_at, end_at)).await?
+}
+
+#[tauri::command]
+async fn request_calendar_access(app: AppHandle) -> Result<bool, String> {
+    let _ = app.set_activation_policy(ActivationPolicy::Regular);
+    let waiting = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        waiting
+            .run_on_main_thread(move || {
+                events::begin_access_request(move |result| {
+                    let _ = sender.send(result);
+                });
+            })
+            .map_err(|error| error.to_string())?;
+        let granted = receiver
+            .recv_timeout(Duration::from_secs(180))
+            .map_err(|_| "Calendar access request timed out. Try again.".to_string())??;
+        on_main(&waiting, move || events::finish_access_request(granted))?;
+        Ok(granted)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn get_calendar_access(app: AppHandle) -> Result<bool, String> {
+    on_main_async(app, events::has_access).await
+}
+
+#[tauri::command]
+fn join_meeting(url: String) -> Result<(), String> {
+    events::open_meeting(&url)
+}
+
+#[tauri::command]
+fn open_event(id: String) -> Result<(), String> {
+    events::open_event(&id)
 }
 
 #[tauri::command]
@@ -639,6 +876,7 @@ pub fn run() {
             });
             set_launch_at_login(app.handle(), initial.launch_at_login);
             build_calendar_window(app.handle())?;
+            build_events_window(app.handle())?;
             build_settings_window(app.handle())?;
             apply_app_theme(app.handle(), &initial.theme);
             build_tray(app.handle())?;
@@ -649,13 +887,22 @@ pub fn run() {
             get_settings,
             update_settings,
             set_tray_label,
+            set_event_tray_label,
             beep,
             hide_calendar,
+            hide_events,
+            set_events_height,
             set_calendar_pinned,
             open_settings,
             quit_app,
             app_version,
             check_for_updates,
+            get_upcoming_event,
+            get_calendar_events,
+            request_calendar_access,
+            get_calendar_access,
+            join_meeting,
+            open_event,
         ])
         .run(tauri::generate_context!())
         .expect("Calendo failed to start");
@@ -664,6 +911,18 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn events_popover_grows_with_content_within_bounds() {
+        assert_eq!(events_height(40.0, 982.0), EVENTS_MIN_HEIGHT);
+        assert_eq!(events_height(300.0, 982.0), 300.0);
+        assert_eq!(events_height(3000.0, 982.0), 982.0 * EVENTS_SCREEN_SHARE);
+        // A tall day is served whole rather than clipped to the screen.
+        assert_eq!(events_height(1400.0, 982.0), 1400.0);
+        assert_eq!(events_height(f64::NAN, 982.0), EVENTS_MIN_HEIGHT);
+        // A screen too short for the minimum still yields a usable window.
+        assert_eq!(events_height(400.0, 50.0), EVENTS_MIN_HEIGHT);
+    }
 
     // Retina laptop below a 1× external, matching a typical arrangement:
     // laptop (0, 0) 1512×982 @2x, external (−197, −1080) 1920×1080 @1x.
@@ -692,7 +951,7 @@ mod tests {
         let (x, y, placement) =
             popover_origin(500.0, -1080.0, 40.0, 24.0, 340.0, 326.0, EXTERNAL);
         assert_eq!(x, 350.0);
-        assert_eq!(y, -1054.0);
+        assert_eq!(y, -1056.0);
         assert_eq!(placement, PopoverPlacement::Below);
         assert!(point_in_screen(x, y, EXTERNAL));
         assert!(!point_in_screen(x, y, LAPTOP));
@@ -715,7 +974,7 @@ mod tests {
             },
         );
         assert_eq!(x, 1050.0);
-        assert_eq!(y, 26.0);
+        assert_eq!(y, 24.0);
         assert_eq!(placement, PopoverPlacement::Below);
     }
 
@@ -724,7 +983,7 @@ mod tests {
         let (x, y, placement) =
             popover_origin(-180.0, -1080.0, 40.0, 24.0, 340.0, 326.0, EXTERNAL);
         assert_eq!(x, EXTERNAL.x + 8.0);
-        assert_eq!(y, -1054.0);
+        assert_eq!(y, -1056.0);
         assert_eq!(placement, PopoverPlacement::Below);
         assert!(point_in_screen(x, y, EXTERNAL));
     }

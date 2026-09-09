@@ -15,8 +15,8 @@ For security issues, use [private reporting](SECURITY.md).
 
 ## What is in scope
 
-Calendo is a month view in the menu bar. It does not sync accounts, fetch
-events, or send data off the Mac. A change that adds calendar integration or
-a network dependency is a different app.
+Calendo is a month view in the menu bar. It can optionally read local macOS
+Calendar events through EventKit for upcoming meeting awareness. It does not
+sync accounts or send calendar data off the Mac.
 
 For anything large, open an issue before writing it.

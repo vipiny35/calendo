@@ -12,6 +12,7 @@ export type AppSettings = {
   highlightWeekdays: Weekday[];
   launchAtLogin: boolean;
   beepOnTheHour: boolean;
+  showUpcomingEvent: boolean;
   autoUpdate: boolean;
   theme: Theme;
 };
@@ -89,6 +90,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   highlightWeekdays: [...DEFAULT_HIGHLIGHT_WEEKDAYS],
   launchAtLogin: false,
   beepOnTheHour: false,
+  showUpcomingEvent: false,
   autoUpdate: true,
   theme: "system",
 };
@@ -252,6 +254,10 @@ export function normalizeSettings(raw: unknown): AppSettings {
       DEFAULT_SETTINGS.launchAtLogin,
     ),
     beepOnTheHour: asBoolean(input.beepOnTheHour, DEFAULT_SETTINGS.beepOnTheHour),
+    showUpcomingEvent: asBoolean(
+      input.showUpcomingEvent,
+      DEFAULT_SETTINGS.showUpcomingEvent,
+    ),
     autoUpdate: asBoolean(input.autoUpdate, DEFAULT_SETTINGS.autoUpdate),
     theme: THEMES.has(theme as Theme) ? (theme as Theme) : DEFAULT_SETTINGS.theme,
   };

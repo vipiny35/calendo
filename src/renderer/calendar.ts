@@ -14,10 +14,11 @@ import {
   occupancyFromWeeks,
 } from "../shared/month-outline";
 import { menuBarLabel, highlightedColumnRuns, type AppSettings } from "../shared/settings";
+import { eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/events";
 import { lucideIcon } from "./icons";
-import { framedGlyphPng } from "./tray-frame";
+import { eventGlyphPng, framedGlyphPng } from "./tray-frame";
 import { installTauriBridge, type DesktopApi } from "./host";
-import { ChevronLeft, ChevronRight, CircleDot, Settings } from "lucide";
+import { ChevronLeft, ChevronRight, CircleDot, Settings, Video } from "lucide";
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -111,31 +112,150 @@ function startCalendar(api: DesktopApi): void {
   const todayButton = requireElement<HTMLButtonElement>("today-month");
   const next = requireElement<HTMLButtonElement>("next-month");
   const settingsButton = requireElement<HTMLButtonElement>("settings");
+  const eventCard = requireElement<HTMLElement>("event-card");
+  const eventStatusLabel = requireElement<HTMLElement>("event-status");
+  const eventTitle = requireElement<HTMLElement>("event-title");
+  const eventMeta = requireElement<HTMLElement>("event-meta");
+  const joinMeeting = requireElement<HTMLButtonElement>("join-meeting");
+  const calendarAccess = requireElement<HTMLButtonElement>("calendar-access");
+  const dayEvents = requireElement<HTMLElement>("day-events");
+  const dayEventsTitle = requireElement<HTMLElement>("day-events-title");
+  const dayEventsCount = requireElement<HTMLElement>("day-events-count");
+  const dayEventsList = requireElement<HTMLElement>("day-events-list");
   prev.append(lucideIcon(ChevronLeft, 18));
   todayButton.append(lucideIcon(CircleDot, 18));
   next.append(lucideIcon(ChevronRight, 18));
   settingsButton.append(lucideIcon(Settings, 16));
+  joinMeeting.append(lucideIcon(Video, 15), document.createTextNode("Join Meeting"));
 
   let settings: AppSettings | null = null;
   let viewYear = new Date().getFullYear();
   let viewMonth = new Date().getMonth();
   let focusIso = toIso(new Date());
   let lastTrayLabel = "";
+  let lastEventTrayLabel = "";
   let lastHour = new Date().getHours();
+  let upcomingEvent: UpcomingEvent | null = null;
+  let calendarEvents: UpcomingEvent[] = [];
+  let eventError: string | null = null;
+  let eventRequest = 0;
+  let calendarOpen = false;
+
+  const paintEvent = (): void => {
+    eventCard.hidden = true;
+    calendarAccess.hidden = true;
+  };
+
+  const refreshUpcoming = async (): Promise<void> => {
+    const request = ++eventRequest;
+    if (!settings?.showUpcomingEvent) {
+      upcomingEvent = null;
+      calendarEvents = [];
+      eventError = null;
+      paintEvent();
+      paintDayEvents();
+      refreshTray();
+      return;
+    }
+    try {
+      const monthStart = new Date(viewYear, viewMonth, 1);
+      const monthEnd = new Date(viewYear, viewMonth + 1, 1);
+      const nextEvent = await api.getUpcomingEvent();
+      let monthEvents: UpcomingEvent[] = [];
+      try {
+        monthEvents = await api.getCalendarEvents(monthStart.getTime(), monthEnd.getTime());
+      } catch {
+        // Calendar grid decorations belong to the events popover and are optional.
+      }
+      if (request !== eventRequest) return;
+      upcomingEvent = nextEvent;
+      calendarEvents = monthEvents;
+      eventError = null;
+    } catch (error) {
+      if (request !== eventRequest) return;
+      upcomingEvent = null;
+      calendarEvents = [];
+      eventError = error instanceof Error ? error.message : String(error);
+    }
+    paintEvent();
+    paintDayEvents();
+    refreshTray();
+    render();
+  };
+
+  const paintDayEvents = (): void => {
+    dayEvents.hidden = true;
+    return;
+    const selectedDate = fromIso(focusIso);
+    dayEventsTitle.textContent = new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    }).format(selectedDate);
+    const selectedEvents = calendarEvents.filter(
+      (event) => toIso(new Date(event.startAt)) === focusIso,
+    );
+    dayEventsCount.textContent = selectedEvents.length
+      ? `${selectedEvents.length} event${selectedEvents.length === 1 ? "" : "s"}`
+      : "";
+    if (!selectedEvents.length) {
+      const empty = document.createElement("p");
+      empty.className = "day-events-empty";
+      empty.textContent = eventError ? "Allow Calendar access to see events." : "No events";
+      dayEventsList.replaceChildren(empty);
+      return;
+    }
+    dayEventsList.replaceChildren(
+      ...selectedEvents.map((event) => {
+        const item = document.createElement("div");
+        item.className = "day-event";
+        const dot = document.createElement("span");
+        dot.className = "day-event-dot";
+        dot.setAttribute("aria-hidden", "true");
+        const title = document.createElement("span");
+        title.className = "day-event-title";
+        title.textContent = event.title;
+        const time = document.createElement("span");
+        time.className = "day-event-time";
+        time.textContent = eventTimeRange(event);
+        item.append(dot, title, time);
+        return item;
+      }),
+    );
+  };
 
   const refreshTray = (): void => {
     if (!settings) return;
     const now = new Date();
     const label = menuBarLabel(settings, now);
-    const signature = `${label.text ?? ""}|${label.day ?? ""}|${label.style}`;
+    const status = upcomingEvent && now.getTime() < upcomingEvent.endAt
+      ? eventStatus(upcomingEvent, now.getTime()).label
+      : "";
+    const baseTitle = label.style === "none" ? label.text ?? "" : "";
+    // A slim leading rule mirrors the native pressed state while our custom
+    // popover owns focus instead of an AppKit menu.
+    const title = calendarOpen && baseTitle
+      ? `┃  ${baseTitle.replaceAll(" ", "\u2009")}`
+      : baseTitle;
+    const trayStyle = label.style;
+    const signature = `${title}|${label.day ?? ""}|${trayStyle}`;
+    // A hair space keeps "2h 21m" from reading as one long number without
+    // opening the full word space the menu bar font would otherwise give it.
+    const eventTitle = status ? status.replace(/(\d+)([hm])/g, "$1\u200a$2") : null;
+    const eventSignature = `${eventTitle ?? ""}|${Boolean(eventTitle)}`;
+    if (eventSignature !== lastEventTrayLabel) {
+      lastEventTrayLabel = eventSignature;
+      // The countdown rides in the glyph, so the status item keeps no title.
+      void api.setEventTrayLabel(null, eventTitle ? eventGlyphPng(eventTitle) : null, Boolean(eventTitle));
+    }
     if (signature === lastTrayLabel) return;
     lastTrayLabel = signature;
     // The cutout style draws its date into the glyph instead of the title.
     const framed = label.style === "framed" ? label.text : null;
     void api.setTrayLabel(
-      framed === null ? label.text : null,
+      title || null,
       label.day,
-      label.style,
+      trayStyle,
       framed === null ? null : framedGlyphPng(framed),
     );
   };
@@ -223,6 +343,7 @@ function startCalendar(api: DesktopApi): void {
             viewMonth = day.month;
           }
           render({ focusGrid: true });
+          paintDayEvents();
         });
         cell.append(button);
         row.append(cell);
@@ -257,6 +378,8 @@ function startCalendar(api: DesktopApi): void {
     viewMonth = today.getMonth();
     focusIso = toIso(today);
     render({ announceMonth: true, focusGrid: true });
+    paintDayEvents();
+    void refreshUpcoming();
   };
 
   const shiftMonth = (delta: number): void => {
@@ -266,6 +389,8 @@ function startCalendar(api: DesktopApi): void {
     viewMonth = next.month;
     focusIso = toIso(keep);
     render({ announceMonth: true, focusGrid: true });
+    paintDayEvents();
+    void refreshUpcoming();
   };
 
   const moveFocus = (days: number): void => {
@@ -275,6 +400,8 @@ function startCalendar(api: DesktopApi): void {
       viewYear = next.getFullYear();
       viewMonth = next.getMonth();
       render({ announceMonth: true, focusGrid: true });
+      paintDayEvents();
+      void refreshUpcoming();
       return;
     }
     render({ focusGrid: true });
@@ -285,6 +412,22 @@ function startCalendar(api: DesktopApi): void {
   next.addEventListener("click", () => shiftMonth(1));
   settingsButton.addEventListener("click", () => {
     void api.openSettings();
+  });
+  joinMeeting.addEventListener("click", () => {
+    const url = upcomingEvent?.joinUrl;
+    if (!url) return;
+    void api.joinMeeting(url).then(() => api.hideCalendar());
+  });
+  calendarAccess.addEventListener("click", async () => {
+    calendarAccess.disabled = true;
+    try {
+      await api.requestCalendarAccess();
+      await refreshUpcoming();
+    } catch {
+      eventMeta.textContent = "Could not request Calendar access. Try again.";
+    } finally {
+      calendarAccess.disabled = false;
+    }
   });
 
   document.addEventListener("keydown", (event) => {
@@ -350,13 +493,15 @@ function startCalendar(api: DesktopApi): void {
   const applySettings = (next: AppSettings): void => {
     settings = next;
     applyTheme(next.theme);
+    paintEvent();
+    paintDayEvents();
     refreshTray();
     render();
+    void refreshUpcoming();
   };
 
   void api.getSettings().then((next) => {
     applySettings(next);
-    refreshTray();
   });
   api.onSettingsChanged(applySettings);
   api.onClockTick(() => {
@@ -367,9 +512,17 @@ function startCalendar(api: DesktopApi): void {
     }
     refreshTray();
     render();
+    void refreshUpcoming();
   });
   api.onCalendarShown(() => {
+    calendarOpen = true;
+    refreshTray();
     render({ focusGrid: true });
+    void refreshUpcoming();
+  });
+  api.onCalendarHidden(() => {
+    calendarOpen = false;
+    refreshTray();
   });
 }
 

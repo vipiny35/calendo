@@ -1,6 +1,6 @@
 [package]
 name = "calendo"
-version = "0.1.1"
+version = "0.2.0"
 description = "A menu bar calendar for macOS"
 authors = ["Vipin Yadav"]
 license = "MIT"
@@ -21,3 +21,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 objc2 = "0.6"
 window-vibrancy = "0.6"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-event-kit = "0.3.2"
+objc2-app-kit = "0.3.2"
+objc2-foundation = "0.3.2"
+block2 = "0.6"
