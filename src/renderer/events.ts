@@ -78,7 +78,12 @@ function detailRow(icon: SVGElement | null, text: string, onClick?: () => void):
 function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
   const nodes: HTMLElement[] = [];
   const status = eventStatus(event, now);
-  nodes.push(sectionLabel(status.timing === "ongoing" ? `Happening now, ${status.label}` : `Upcoming ${status.label}`));
+  const heading = status.timing !== "ongoing"
+    ? `Upcoming ${status.label}`
+    : status.label === "now"
+      ? "Happening now"
+      : `Happening now, ${status.label}`;
+  nodes.push(sectionLabel(heading));
 
   const details = document.createElement("div");
   details.className = "detail";

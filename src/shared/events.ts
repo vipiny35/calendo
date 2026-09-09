@@ -31,6 +31,9 @@ function roundedMinutes(milliseconds: number): number {
   return Math.max(1, Math.ceil(milliseconds / 60_000));
 }
 
+/** An event that just started reads "now" rather than counting itself down. */
+const NOW_WINDOW_MS = 10 * 60_000;
+
 function relativeTime(milliseconds: number): string {
   const minutes = roundedMinutes(milliseconds);
   if (minutes < 60) return `${minutes}m`;
@@ -50,6 +53,9 @@ export function eventStatus(
     };
   }
   if (now >= event.startAt && now < event.endAt) {
+    if (now - event.startAt < NOW_WINDOW_MS) {
+      return { label: "now", timing: "ongoing" };
+    }
     return {
       label: `ends in ${relativeTime(event.endAt - now)}`,
       timing: "ongoing",
