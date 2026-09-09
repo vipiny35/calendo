@@ -42,7 +42,7 @@ html, body {
   border-top: 1px solid var(--rule);
 }
 .section-label {
-  margin: 18px 8px 6px;
+  margin: 10px 8px 3px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 400;
@@ -79,7 +79,6 @@ html, body {
     background: AccentColor;
     color: AccentColorText;
   }
-  .event.interactive:hover .chevron,
   .detail-row.interactive:hover .label,
   .event.declined.interactive:hover .title { color: inherit; opacity: 1; }
   .event.interactive:hover .dot { opacity: 1; }
@@ -137,13 +136,6 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chevron {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  color: var(--muted);
-}
-.event[aria-expanded="true"] .chevron { transform: rotate(90deg); }
 .detail { display: flex; flex-direction: column; }
 .detail-row { padding-left: 10px; }
 .detail-row .glyph {

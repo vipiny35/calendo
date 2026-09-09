@@ -1,7 +1,7 @@
 import { endOfTomorrow, eventStatus, type EventResponse, type UpcomingEvent } from "../shared/events";
 import { installTauriBridge } from "./host";
 import { lucideIcon } from "./icons";
-import { ChevronRight, MapPin, Video } from "lucide";
+import { MapPin, Video } from "lucide";
 
 const api = installTauriBridge();
 const list = document.getElementById("list")!;
@@ -107,24 +107,6 @@ function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
 
   const row = eventRow(event, true);
   row.classList.add("featured");
-  const chevron = document.createElement("span");
-  chevron.className = "chevron";
-  chevron.append(lucideIcon(ChevronRight, 16));
-  row.append(chevron);
-  if (details.childElementCount) {
-    row.setAttribute("aria-expanded", "true");
-    chevron.setAttribute("role", "button");
-    chevron.title = "Show meeting details";
-    chevron.addEventListener("click", (click) => {
-      click.stopPropagation();
-      const expanded = row.getAttribute("aria-expanded") === "true";
-      row.setAttribute("aria-expanded", expanded ? "false" : "true");
-      details.hidden = expanded;
-      syncHeight();
-    });
-  } else {
-    chevron.hidden = true;
-  }
   nodes.push(row);
   if (details.childElementCount) nodes.push(details);
   return nodes;
