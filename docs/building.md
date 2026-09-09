@@ -15,7 +15,9 @@ pnpm test
 pnpm app
 ```
 
-`pnpm app` builds and opens a debug `Calendo.app` bundle. This includes the
+`pnpm app` builds and opens a debug `Calendo.app` bundle. It layers
+`src-tauri/tauri.dev.conf.json` over the config to skip the update payload,
+which would otherwise ask for the signing key on every local build. This includes the
 app identity and Calendar usage descriptions needed for macOS permission prompts.
 Look for Calendo in the menu bar.
 
