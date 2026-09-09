@@ -16,9 +16,17 @@ The menu bar item can be a filled date, a date inside a rounded outline, a
 calendar, or the date alone. Every style but the filled one can add the weekday
 and the month. Settings control that pairing, which day the week starts on,
 week numbers, highlighted weekdays, appearance, an hourly chime, and whether
-Calendo opens at login. Optional upcoming-event awareness reads macOS Calendar,
-adds a compact countdown beside the menu-bar date, and puts a Join Meeting
-action in the popover when an event contains a web link.
+Calendo opens at login.
+
+Optional upcoming-event awareness reads macOS Calendar and adds a second menu
+bar item: a countdown to the next event, which reads `now` for the first ten
+minutes of one in progress, and a popover listing what is left of today and
+tomorrow. The popover grows to its content rather than scrolling. Each row
+marks how you answered the invitation — solid when accepted, hatched for maybe,
+dashed while unanswered, struck through when declined — and opens the event in
+whichever app handles `ical://`, usually Calendar. An event carrying a web link
+gets a join row bearing that service's mark: Meet, Zoom, Teams, Webex,
+FaceTime, Jitsi and GoToMeeting are recognised by host.
 
 Calendar access is requested only after the upcoming-event option is enabled.
 Calendo reads events locally through EventKit and does not upload calendar data.
@@ -42,6 +50,8 @@ Calendo stays in the menu bar after you quit every other window.
 
 - **Left click** opens the month.
 - **Right click** offers Settings and Quit.
+- **The countdown item**, when upcoming events are on, opens the event list;
+  Settings and Quit sit below a rule at its foot.
 - **Arrow keys** move by day or week; **Page Up** / **Page Down** change month;
   **T** returns to today; **Esc** closes the popover.
 - The cog, or **⌘,**, opens Settings.
