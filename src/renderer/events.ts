@@ -133,7 +133,8 @@ function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
 function syncHeight(): void {
   const height = list.scrollHeight;
   if (!height) return;
-  void api.setEventsHeight(height + 16);
+  const footer = document.querySelector<HTMLElement>(".footer");
+  void api.setEventsHeight(height + (footer?.offsetHeight ?? 0) + 16);
 }
 
 let loadRevision = 0;
@@ -167,6 +168,12 @@ async function load(): Promise<void> {
     syncHeight();
   }
 }
+document.getElementById("settings")?.addEventListener("click", () => {
+  // Presenting Settings closes the popover on the Rust side.
+  void api.openSettings();
+});
+document.getElementById("quit")?.addEventListener("click", () => void api.quitApp());
+
 api.onEventsShown(() => void load());
 api.onClockTick(() => void load());
 void load();

@@ -3,6 +3,7 @@
   --ink: #dedee0;
   --muted: #929296;
   --hover: rgba(255, 255, 255, 0.09);
+  --rule: rgba(255, 255, 255, 0.13);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
 }
 @media (prefers-color-scheme: light) {
@@ -10,6 +11,7 @@
     --ink: #252527;
     --muted: #727276;
     --hover: rgba(0, 0, 0, 0.07);
+    --rule: rgba(0, 0, 0, 0.11);
   }
 }
 * { box-sizing: border-box; }
@@ -21,8 +23,22 @@ html, body {
   background: transparent;
   user-select: none;
 }
-.events-popover { height: 100%; padding: 8px 6px; color: var(--ink); }
-#list { height: 100%; overflow: auto; }
+.events-popover {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  padding: 8px 6px;
+  color: var(--ink);
+}
+/* The list gives way first, so the footer stays put once the popover is
+   taller than the screen allows. */
+#list { min-height: 0; flex: 1 1 auto; overflow: auto; }
+.footer {
+  flex: 0 0 auto;
+  margin: 7px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--rule);
+}
 .section-label {
   margin: 18px 8px 6px;
   color: var(--muted);
@@ -32,7 +48,8 @@ html, body {
 }
 .section-label:first-child { margin-top: 0; }
 .event,
-.detail-row {
+.detail-row,
+.menu-row {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -49,12 +66,14 @@ html, body {
 }
 /* AccentColor is the user's own highlight, the same one AppKit menus use. */
 .event.interactive:hover,
-.detail-row.interactive:hover {
+.detail-row.interactive:hover,
+.menu-row:hover {
   background: var(--hover);
 }
 @supports (background: AccentColor) {
   .event.interactive:hover,
-  .detail-row.interactive:hover {
+  .detail-row.interactive:hover,
+  .menu-row:hover {
     background: AccentColor;
     color: AccentColorText;
   }
@@ -64,7 +83,8 @@ html, body {
   .event.interactive:hover .dot { opacity: 1; }
 }
 .event.interactive,
-.detail-row.interactive { cursor: default; }
+.detail-row.interactive,
+.menu-row { cursor: default; }
 /* Invitation answers follow the calendar convention: solid when accepted,
    diagonally hatched for maybe, a dotted outline while unanswered, and
    struck through when declined. */
@@ -124,6 +144,7 @@ html, body {
   color: var(--ink);
   opacity: 0.9;
 }
+.menu-row .label,
 .detail-row .label {
   min-width: 0;
   overflow: hidden;
