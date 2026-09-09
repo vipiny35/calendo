@@ -123,13 +123,32 @@ fn close_calendar(app: &AppHandle) {
         let _ = window.hide();
         let _ = app.emit("calendar-hidden", ());
     }
+    set_status_item_highlight(app, TRAY_ID, false);
 }
 
 fn close_events(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(EVENTS_LABEL) {
         let _ = window.hide();
     }
+    set_status_item_highlight(app, EVENT_TRAY_ID, false);
 }
+
+#[cfg(target_os = "macos")]
+fn set_status_item_highlight(app: &AppHandle, id: &str, highlighted: bool) {
+    use objc2_foundation::MainThreadMarker;
+    if let Some(tray) = app.tray_by_id(id) {
+        let _ = tray.with_inner_tray_icon(move |inner| {
+            let Some(item) = inner.ns_status_item() else { return; };
+            let Some(mtm) = MainThreadMarker::new() else { return; };
+            if let Some(button) = item.button(mtm) {
+                button.setHighlighted(highlighted);
+            }
+        });
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_status_item_highlight(_app: &AppHandle, _id: &str, _highlighted: bool) {}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct ScreenBounds {
@@ -304,6 +323,7 @@ fn position_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
 
 fn show_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
     close_events(app);
+    set_status_item_highlight(app, TRAY_ID, true);
     position_calendar(app, tray_rect);
     if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
         let _ = window.show();
@@ -331,6 +351,7 @@ fn toggle_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
 
 fn show_events(app: &AppHandle, tray_rect: tauri::Rect) {
     close_calendar(app);
+    set_status_item_highlight(app, EVENT_TRAY_ID, true);
     let Some(window) = app.get_webview_window(EVENTS_LABEL) else { return; };
     let scale = window.scale_factor().unwrap_or(1.0);
     let pos: LogicalPosition<f64> = tray_rect.position.to_logical(scale);
