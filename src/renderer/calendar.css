@@ -1,6 +1,6 @@
 /*
  * Calendar popover. Native popover material sits behind a light or dark card;
- * this page draws the caret, type, the month outline, and weekday bands.
+ * this page draws the popover, type, month outline, and weekday bands.
  */
 :root {
   --paper: #ffffff;
@@ -15,8 +15,6 @@
   --accent: AccentColor;
   --accent-text: #fff;
   --selection-border: #000;
-  --caret-x: 50%;
-  --caret-size: 11px;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
     sans-serif;
 
@@ -100,12 +98,6 @@ body {
 
 .shell {
   height: 100%;
-  padding-top: var(--caret-size);
-}
-
-.shell[data-placement="above"] {
-  padding-top: 0;
-  padding-bottom: var(--caret-size);
 }
 
 .popover {
@@ -119,25 +111,6 @@ body {
   color: var(--ink);
 }
 
-.caret {
-  position: absolute;
-  z-index: 3;
-  top: calc(var(--caret-size) * -1 + 1px);
-  left: var(--caret-x);
-  width: 20px;
-  height: var(--caret-size);
-  transform: translateX(-50%);
-  background: var(--paper);
-  clip-path: path("M 10 0 C 11.1 0 12.1 0.4 12.7 1.2 L 19.4 9.2 C 20.2 10.3 19.4 11 17.9 11 H 2.1 C 0.6 11 -0.2 10.3 0.6 9.2 L 7.3 1.2 C 7.9 0.4 8.9 0 10 0 Z");
-  filter: drop-shadow(0 0 0.5px var(--rim)) drop-shadow(0 1px 1.5px var(--rim));
-  pointer-events: none;
-}
-
-.shell[data-placement="above"] .caret {
-  top: auto;
-  bottom: calc(var(--caret-size) * -1 + 1px);
-  transform: translateX(-50%) rotate(180deg);
-}
 
 .header {
   display: flex;

@@ -153,7 +153,6 @@ fn calendar_window_size(show_week_numbers: bool, show_upcoming_event: bool) -> (
     (
         calendar_width(show_week_numbers),
         CALENDAR_HEIGHT
-            + glass::CARET_HEIGHT
             + if show_upcoming_event {
                 EVENT_CARD_HEIGHT + EVENT_LIST_HEIGHT
             } else {
@@ -186,6 +185,7 @@ fn apply_app_theme(app: &AppHandle, theme: &str) {
 
 /// Distance from the window's left edge to the caret tip, so the triangle
 /// still points at the menu bar icon after the window is clamped to the screen.
+#[cfg(test)]
 fn caret_offset(window_x: f64, window_w: f64, tray_x: f64, tray_w: f64) -> f64 {
     const INSET: f64 = 22.0;
     let center = tray_x + tray_w / 2.0 - window_x;
@@ -193,18 +193,6 @@ fn caret_offset(window_x: f64, window_w: f64, tray_x: f64, tray_w: f64) -> f64 {
         return window_w / 2.0;
     }
     center.clamp(INSET, window_w - INSET)
-}
-
-fn sync_caret(window: &WebviewWindow, offset: f64, placement: PopoverPlacement) {
-    let side = match placement {
-        PopoverPlacement::Below => "below",
-        PopoverPlacement::Above => "above",
-    };
-    let _ = window.eval(format!(
-        "document.documentElement.style.setProperty('--caret-x','{offset:.1}px');\
-         var shell=document.querySelector('.shell');\
-         if(shell)shell.setAttribute('data-placement','{side}');"
-    ));
 }
 
 /// Top-left of the popover, in the same coordinate space as the tray and screen.
@@ -217,7 +205,7 @@ fn popover_origin(
     win_h: f64,
     screen: ScreenBounds,
 ) -> (f64, f64, PopoverPlacement) {
-    const GAP: f64 = 2.0;
+    const GAP: f64 = 0.0;
     const PAD: f64 = 8.0;
     let mut x = tray_x + tray_w / 2.0 - win_w / 2.0;
     let mut y = tray_y + tray_h + GAP;
@@ -298,13 +286,12 @@ fn position_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
             width: width.max(tray_w),
             height: height.max(tray_h),
         });
-    let (x, y, placement) = popover_origin(tray_x, tray_y, tray_w, tray_h, width, height, screen);
+    let (x, y, _placement) = popover_origin(tray_x, tray_y, tray_w, tray_h, width, height, screen);
 
     let _ = window.set_size(Size::Logical(LogicalSize::new(width, height)));
     // Logical points, not physical: set_position converts physical coords with
     // the *window's* current scale, which is still the other display's.
     let _ = window.set_position(Position::Logical(LogicalPosition::new(x, y)));
-    sync_caret(&window, caret_offset(x, width, tray_x, tray_w), placement);
 }
 
 fn show_calendar(app: &AppHandle, tray_rect: tauri::Rect) {

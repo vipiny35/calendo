@@ -263,7 +263,7 @@ function startCalendar(api: DesktopApi): void {
       : status ? `| ${status}` : "";
     // A slim leading rule mirrors the native pressed state while our custom
     // popover owns focus instead of an AppKit menu.
-    const title = calendarOpen ? `│ ${baseTitle}` : baseTitle;
+    const title = calendarOpen ? `┃  ${baseTitle.replaceAll(" ", "\u2009")}` : baseTitle;
     const trayStyle = timerActive ? "timer" : label.style;
     const signature = `${title}|${label.day ?? ""}|${trayStyle}`;
     if (signature === lastTrayLabel) return;

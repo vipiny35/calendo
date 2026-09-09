@@ -5,52 +5,13 @@
 //! WKWebView. `NSVisualEffectView` with the Popover material is what a real
 //! menu-bar extra uses, and it follows the window's light or dark appearance.
 //!
-//! The effect view is inset by `CARET_HEIGHT` so the triangle that points at
-//! the menu bar icon sits on clear pixels, not a rectangular slab of glass.
+//! The effect view fills the popover window.
 
-use objc2::encode::{Encode, Encoding};
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{class, msg_send, sel};
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
 
-pub const CARET_HEIGHT: f64 = 11.0;
 const CORNER_RADIUS: f64 = 12.0;
-const NS_VIEW_WIDTH_SIZABLE: usize = 2;
-const NS_VIEW_HEIGHT_SIZABLE: usize = 16;
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct NSPoint {
-    x: f64,
-    y: f64,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct NSSize {
-    width: f64,
-    height: f64,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct NSRect {
-    origin: NSPoint,
-    size: NSSize,
-}
-
-unsafe impl Encode for NSPoint {
-    const ENCODING: Encoding = Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
-}
-
-unsafe impl Encode for NSSize {
-    const ENCODING: Encoding = Encoding::Struct("CGSize", &[f64::ENCODING, f64::ENCODING]);
-}
-
-unsafe impl Encode for NSRect {
-    const ENCODING: Encoding = Encoding::Struct("CGRect", &[NSPoint::ENCODING, NSSize::ENCODING]);
-}
-
 /// Must run on the main thread. Setup already does.
 pub fn apply_calendar_glass(window: &tauri::WebviewWindow) {
     let Ok(pointer) = window.ns_window() else {
@@ -68,7 +29,6 @@ pub fn apply_calendar_glass(window: &tauri::WebviewWindow) {
         Some(NSVisualEffectState::Active),
         Some(CORNER_RADIUS),
     );
-    inset_existing_effect(ns_window);
 }
 
 /// Light, dark, or follow the system. The webview's `color-scheme` is not
@@ -149,62 +109,6 @@ fn clear_webview(view: &AnyObject) {
             let child: *mut AnyObject = msg_send![subviews, objectAtIndex: index];
             if !child.is_null() {
                 clear_webview(&*child);
-            }
-        }
-    }
-}
-
-fn caret_frame(content: &AnyObject, bounds: NSRect) -> NSRect {
-    let flipped: Bool = unsafe { msg_send![content, isFlipped] };
-    let height = (bounds.size.height - CARET_HEIGHT).max(0.0);
-    let origin_y = if flipped.as_bool() {
-        bounds.origin.y + CARET_HEIGHT
-    } else {
-        bounds.origin.y
-    };
-    NSRect {
-        origin: NSPoint {
-            x: bounds.origin.x,
-            y: origin_y,
-        },
-        size: NSSize {
-            width: bounds.size.width,
-            height,
-        },
-    }
-}
-
-fn inset_existing_effect(ns_window: &AnyObject) {
-    unsafe {
-        let content: *mut AnyObject = msg_send![ns_window, contentView];
-        if content.is_null() {
-            return;
-        }
-        let bounds: NSRect = msg_send![&*content, bounds];
-        let frame = caret_frame(&*content, bounds);
-        let subviews: *mut AnyObject = msg_send![&*content, subviews];
-        let count: usize = msg_send![subviews, count];
-        for index in 0..count {
-            let child: *mut AnyObject = msg_send![subviews, objectAtIndex: index];
-            if child.is_null() {
-                continue;
-            }
-            let class: *mut AnyObject = msg_send![&*child, class];
-            let name: *mut AnyObject = msg_send![class, className];
-            if name.is_null() {
-                continue;
-            }
-            let utf8: *const i8 = msg_send![&*name, UTF8String];
-            if utf8.is_null() {
-                continue;
-            }
-            let label = std::ffi::CStr::from_ptr(utf8).to_string_lossy();
-            if label.contains("VisualEffect") || label.contains("GlassEffect") {
-                let _: () = msg_send![&*child, setFrame: frame];
-                let _: () = msg_send![
-                    &*child,
-                    setAutoresizingMask: NS_VIEW_WIDTH_SIZABLE | NS_VIEW_HEIGHT_SIZABLE
-                ];
             }
         }
     }
