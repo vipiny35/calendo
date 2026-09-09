@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Core access for the calendar popover and the settings window.",
-  "windows": ["calendar", "settings"],
-  "permissions": ["core:default"]
+  "description": "Core access for the calendar popover, the events popover, and the settings window.",
+  "windows": [
+    "calendar",
+    "events",
+    "settings"
+  ],
+  "permissions": [
+    "core:default"
+  ]
 }
