@@ -1,5 +1,7 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { bindCalendarAccess } from "../src/renderer/calendar-access";
+
+afterEach(() => vi.useRealTimers());
 
 function setup(granted: boolean) {
   const api = {
@@ -46,4 +48,19 @@ it("ignores stale permission checks after a new permission request", async () =>
   await pending;
   expect(elements.row.hidden).toBe(true);
   expect(elements.button.disabled).toBe(false);
+});
+
+it("picks up a System Settings grant without waiting for another focus event", async () => {
+  vi.useFakeTimers();
+  const { api, elements } = setup(false);
+  api.requestCalendarAccess.mockResolvedValue(false);
+  elements.button.dispatchEvent(new Event("click"));
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(api.requestCalendarAccess).toHaveBeenCalled();
+  expect(elements.row.hidden).toBe(false);
+  api.getCalendarAccess.mockResolvedValue(true);
+  await vi.advanceTimersByTimeAsync(800);
+  expect(elements.row.hidden).toBe(true);
+  expect(elements.status.textContent).toBe("Calendar access enabled.");
 });

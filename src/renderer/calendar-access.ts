@@ -1,5 +1,7 @@
 import type { DesktopApi } from "./host";
 
+const GRANT_WATCH_MS = [800, 1600, 3200, 6400];
+
 /** Always paint permission from the native result, including after Settings returns. */
 export function bindCalendarAccess(
   api: Pick<DesktopApi, "getCalendarAccess" | "requestCalendarAccess">,
@@ -35,17 +37,34 @@ export function bindCalendarAccess(
       if (current === revision) showError(error);
     }
   };
+  const watchForGrant = async (started: number): Promise<void> => {
+    for (const delay of GRANT_WATCH_MS) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      if (requesting || started !== revision) return;
+      try {
+        const granted = await api.getCalendarAccess();
+        if (started !== revision) return;
+        paint(granted);
+        if (granted) return;
+      } catch {
+        if (started !== revision) return;
+      }
+    }
+  };
   const request = async (): Promise<void> => {
     if (requesting) return;
-    ++revision;
+    const started = ++revision;
     requesting = true;
     button.disabled = true;
     status.hidden = false;
     status.textContent = "Requesting Calendar access…";
     try {
-      paint(await api.requestCalendarAccess());
+      const granted = await api.requestCalendarAccess();
+      if (started !== revision) return;
+      paint(granted);
+      if (!granted && toggle.checked) void watchForGrant(started);
     } catch (error) {
-      showError(error);
+      if (started === revision) showError(error);
     } finally {
       requesting = false;
       button.disabled = false;

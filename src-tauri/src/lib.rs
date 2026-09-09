@@ -24,6 +24,9 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 
 const CALENDAR_LABEL: &str = "calendar";
 const EVENTS_LABEL: &str = "events";
+const EVENTS_WIDTH: f64 = 430.0;
+const EVENTS_MIN_HEIGHT: f64 = 92.0;
+const EVENTS_MAX_HEIGHT: f64 = 620.0;
 const SETTINGS_LABEL: &str = "settings";
 const TRAY_ID: &str = "calendo";
 const EVENT_TRAY_ID: &str = "calendo-event";
@@ -346,7 +349,7 @@ fn show_events(app: &AppHandle, tray_rect: tauri::Rect) {
     let pos: LogicalPosition<f64> = tray_rect.position.to_logical(scale);
     let size: tauri::LogicalSize<f64> = tray_rect.size.to_logical(scale);
     let _ = window.set_position(Position::Logical(LogicalPosition::new(
-        pos.x + size.width / 2.0 - 215.0,
+        pos.x + size.width / 2.0 - EVENTS_WIDTH / 2.0,
         pos.y + size.height,
     )));
     let _ = window.show();
@@ -514,7 +517,7 @@ fn build_calendar_window(app: &AppHandle) -> tauri::Result<()> {
 fn build_events_window(app: &AppHandle) -> tauri::Result<()> {
     let window = WebviewWindowBuilder::new(app, EVENTS_LABEL, WebviewUrl::App("events.html".into()))
         .title("Upcoming Events")
-        .inner_size(430.0, 420.0)
+        .inner_size(EVENTS_WIDTH, EVENTS_MIN_HEIGHT)
         .decorations(false)
         .transparent(true)
         .shadow(true)
@@ -690,6 +693,26 @@ fn hide_events(app: AppHandle) {
     close_events(&app);
 }
 
+/// The popover grows with its content instead of scrolling a fixed frame,
+/// up to a height that still fits under the menu bar.
+fn events_height(content: f64) -> f64 {
+    if !content.is_finite() {
+        return EVENTS_MIN_HEIGHT;
+    }
+    content.clamp(EVENTS_MIN_HEIGHT, EVENTS_MAX_HEIGHT)
+}
+
+#[tauri::command]
+fn set_events_height(app: AppHandle, height: f64) {
+    let Some(window) = app.get_webview_window(EVENTS_LABEL) else {
+        return;
+    };
+    let _ = window.set_size(Size::Logical(LogicalSize::new(
+        EVENTS_WIDTH,
+        events_height(height),
+    )));
+}
+
 #[tauri::command]
 fn set_calendar_pinned(state: State<AppState>, pinned: bool) {
     state.calendar_pinned.store(pinned, Ordering::SeqCst);
@@ -705,26 +728,69 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
-#[tauri::command]
-fn get_upcoming_event() -> Result<Option<events::UpcomingEvent>, String> {
-    events::fetch_upcoming()
+fn on_main<T, F>(app: &AppHandle, work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    app.run_on_main_thread(move || {
+        let _ = sender.send(work());
+    })
+    .map_err(|error| error.to_string())?;
+    receiver.recv().map_err(|error| error.to_string())
 }
 
-#[tauri::command]
-fn get_calendar_events(start_at: i64, end_at: i64) -> Result<Vec<events::UpcomingEvent>, String> {
-    events::fetch_range(start_at, end_at)
-}
-
-#[tauri::command]
-async fn request_calendar_access() -> Result<bool, String> {
-    tauri::async_runtime::spawn_blocking(events::request_access_if_needed)
+async fn on_main_async<T, F>(app: AppHandle, work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || on_main(&app, work))
         .await
         .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn get_calendar_access() -> bool {
-    events::has_access()
+async fn get_upcoming_event(app: AppHandle) -> Result<Option<events::UpcomingEvent>, String> {
+    on_main_async(app, events::fetch_upcoming).await?
+}
+
+#[tauri::command]
+async fn get_calendar_events(
+    app: AppHandle,
+    start_at: i64,
+    end_at: i64,
+) -> Result<Vec<events::UpcomingEvent>, String> {
+    on_main_async(app, move || events::fetch_range(start_at, end_at)).await?
+}
+
+#[tauri::command]
+async fn request_calendar_access(app: AppHandle) -> Result<bool, String> {
+    let _ = app.set_activation_policy(ActivationPolicy::Regular);
+    let waiting = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        waiting
+            .run_on_main_thread(move || {
+                events::begin_access_request(move |result| {
+                    let _ = sender.send(result);
+                });
+            })
+            .map_err(|error| error.to_string())?;
+        let granted = receiver
+            .recv_timeout(Duration::from_secs(180))
+            .map_err(|_| "Calendar access request timed out. Try again.".to_string())??;
+        on_main(&waiting, move || events::finish_access_request(granted))?;
+        Ok(granted)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn get_calendar_access(app: AppHandle) -> Result<bool, String> {
+    on_main_async(app, events::has_access).await
 }
 
 #[tauri::command]
@@ -801,6 +867,7 @@ pub fn run() {
             beep,
             hide_calendar,
             hide_events,
+            set_events_height,
             set_calendar_pinned,
             open_settings,
             quit_app,
@@ -819,6 +886,14 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn events_popover_grows_with_content_within_bounds() {
+        assert_eq!(events_height(40.0), EVENTS_MIN_HEIGHT);
+        assert_eq!(events_height(300.0), 300.0);
+        assert_eq!(events_height(2000.0), EVENTS_MAX_HEIGHT);
+        assert_eq!(events_height(f64::NAN), EVENTS_MIN_HEIGHT);
+    }
 
     // Retina laptop below a 1× external, matching a typical arrangement:
     // laptop (0, 0) 1512×982 @2x, external (−197, −1080) 1920×1080 @1x.

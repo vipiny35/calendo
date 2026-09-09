@@ -10,18 +10,18 @@ vi.mock("../src/renderer/host", () => ({ installTauriBridge: () => api }));
 afterEach(() => { vi.unstubAllGlobals(); vi.resetAllMocks(); vi.resetModules(); });
 
 it("replaces startup permission failure when opened after granting access", async () => {
-  const summary = { textContent: "" };
   const list = { innerHTML: "", replaceChildren: vi.fn() };
   vi.stubGlobal("document", {
-    getElementById: (id: string) => id === "summary" ? summary : id === "list" ? list : null,
+    getElementById: (id: string) => id === "list" ? list : null,
+    addEventListener: vi.fn(),
     createElement: () => ({ className: "", textContent: "" }),
   });
   api.getCalendarEvents.mockRejectedValueOnce("Calendar access is not enabled");
   await import("../src/renderer/events");
-  await vi.waitFor(() => expect(summary.textContent).toBe("Calendar access needed"));
+  await vi.waitFor(() => expect(list.replaceChildren).toHaveBeenCalledWith(expect.objectContaining({ textContent: "Calendar access is not enabled" })));
   api.getCalendarEvents.mockResolvedValue([]);
   api.onEventsShown.mock.calls[0]![0]();
-  await vi.waitFor(() => expect(summary.textContent).toBe("No upcoming events"));
+  await vi.waitFor(() => expect(list.innerHTML).toContain("No upcoming events."));
   expect(list.innerHTML).toContain("No upcoming events.");
 
   // A delayed denied response must not replace a newer successful refresh.
@@ -32,5 +32,5 @@ it("replaces startup permission failure when opened after granting access", asyn
   await vi.waitFor(() => expect(api.getCalendarEvents).toHaveBeenCalledTimes(4));
   reject("Calendar access is not enabled");
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(summary.textContent).toBe("No upcoming events");
+  expect(list.innerHTML).toContain("No upcoming events.");
 });

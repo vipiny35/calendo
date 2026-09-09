@@ -7,7 +7,7 @@
   "packageManager": "pnpm@9.4.0",
   "scripts": {
     "build": "pnpm typecheck && node scripts/copy-static.mjs",
-    "app": "tauri build --debug --bundles app && codesign --force --deep --sign - src-tauri/target/debug/bundle/macos/Calendo.app && open src-tauri/target/debug/bundle/macos/Calendo.app",
+    "app": "tauri build --debug --bundles app && open src-tauri/target/debug/bundle/macos/Calendo.app",
     "dev": "pnpm build && tauri dev",
     "dmg": "tauri build --bundles dmg",
     "test": "pnpm test:ui && pnpm test:rust",
