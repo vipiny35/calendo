@@ -19,8 +19,17 @@ const ENV_FILE = ".env.notarization";
 const DMG_DIR = "src-tauri/target/release/bundle/dmg";
 const MACOS_DIR = "src-tauri/target/release/bundle/macos";
 const REQUIRED = ["APPLE_ID", "APPLE_TEAM_ID", "APPLE_PASSWORD"];
-/// Where `tauri signer generate` put the key; kept out of the repo.
-const SIGNING_KEY = join(homedir(), ".calendo", "updater.key");
+/// Where the update signing key lives, in order of preference. It sits with
+/// the other macOS signing material rather than in the repository: it cannot
+/// be revoked or rotated, since every installed copy trusts exactly the one
+/// key compiled into it.
+const SIGNING_KEYS = [
+  join(
+    homedir(),
+    "Library/CloudStorage/OneDrive-Personal/keys/macos-dev/updater.key",
+  ),
+  join(homedir(), ".calendo", "updater.key"),
+];
 const REPOSITORY = "vipiny35/calendo";
 
 function loadCredentials() {
@@ -47,16 +56,19 @@ function run(command, args, label) {
 /// every update it is offered.
 function loadSigningKey() {
   if (process.env.TAURI_SIGNING_PRIVATE_KEY) return;
-  if (!existsSync(SIGNING_KEY)) {
+  const key = SIGNING_KEYS.find((path) => existsSync(path));
+  if (!key) {
     console.error(
-      `No update signing key at ${SIGNING_KEY}.\n` +
-        `Generate one with: pnpm tauri signer generate -w ${SIGNING_KEY}\n` +
-        `Keep it out of the repository, and keep a backup: an update signed by\n` +
-        `any other key is refused by every copy already installed.`,
+      `No update signing key found. Looked in:\n` +
+        SIGNING_KEYS.map((path) => `  ${path}`).join("\n") +
+        `\n\nSet TAURI_SIGNING_PRIVATE_KEY to its path, or generate one with:\n` +
+        `  pnpm tauri signer generate -w ${SIGNING_KEYS[0]}\n\n` +
+        `A new key orphans every copy already installed: they trust only the\n` +
+        `key compiled into them, and would need a manual reinstall.`,
     );
     process.exit(1);
   }
-  process.env.TAURI_SIGNING_PRIVATE_KEY = SIGNING_KEY;
+  process.env.TAURI_SIGNING_PRIVATE_KEY = key;
   process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ??= "";
 }
 

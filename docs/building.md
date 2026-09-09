@@ -40,11 +40,16 @@ skips all of this, run `pnpm tauri build --bundles dmg` directly.
 
 Installed copies update themselves. The app reads
 `releases/latest/download/latest.json`, and the payload it downloads is signed
-with a key held at `~/.calendo/updater.key`, outside the repository; its public
-half is in `tauri.conf.json`. **Keep a backup of that key.** An update signed
-with any other key is refused by every copy already installed, so losing it
-means installed apps can never be updated again. `TAURI_SIGNING_PRIVATE_KEY`
-overrides the path, for CI.
+with a key kept beside the other macOS signing material, in
+`~/Library/CloudStorage/OneDrive-Personal/keys/macos-dev/updater.key`, never in
+the repository. Its public half is in `tauri.conf.json`.
+`TAURI_SIGNING_PRIVATE_KEY` overrides the path, for CI or another machine.
+
+**That key cannot be replaced.** Each copy trusts exactly the public key
+compiled into it, and the plugin takes a single key with no rollover. Ship a
+release signed by a different one and every installed copy will fetch the
+update, download it in full, fail to verify it, and stay where it is until
+someone reinstalls by hand.
 
 `pnpm dmg` writes `latest.json` alongside the disk image and prints the three
 files a release needs:
