@@ -80,7 +80,7 @@ export function framedGlyphMask(text: string): string {
  */
 const EVENT_BOX = 36;
 /** Slim rounded mark that leads the countdown. */
-const PILL_WIDTH = 4;
+const PILL_WIDTH = 8;
 const PILL_HEIGHT = 25;
 /** Transparent run between the mark and the countdown. */
 const PILL_GAP = 13;
