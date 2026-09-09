@@ -20,6 +20,7 @@ export type DesktopApi = {
     style: AppSettings["menuBarIcon"] | "timer",
     image: number[] | null,
   ) => Promise<void>;
+  setEventTrayLabel: (title: string | null, image: number[] | null, visible: boolean) => Promise<void>;
   beep: () => Promise<void>;
   getUpcomingEvent: () => Promise<UpcomingEvent | null>;
   getCalendarEvents: (startAt: number, endAt: number) => Promise<UpcomingEvent[]>;
@@ -76,6 +77,8 @@ export const api: DesktopApi = {
   updateSettings: (patch) => invoke<AppSettings>("update_settings", { patch }),
   setTrayLabel: (title, iconDay, style, image) =>
     invoke<void>("set_tray_label", { title, iconDay, style, image }),
+  setEventTrayLabel: (title, image, visible) =>
+    invoke<void>("set_event_tray_label", { title, image, visible }),
   beep: () => invoke<void>("beep"),
   getUpcomingEvent: () => invoke<UpcomingEvent | null>("get_upcoming_event"),
   getCalendarEvents: (startAt, endAt) =>

@@ -133,6 +133,7 @@ function startCalendar(api: DesktopApi): void {
   let viewMonth = new Date().getMonth();
   let focusIso = toIso(new Date());
   let lastTrayLabel = "";
+  let lastEventTrayLabel = "";
   let lastHour = new Date().getHours();
   let upcomingEvent: UpcomingEvent | null = null;
   let calendarEvents: UpcomingEvent[] = [];
@@ -255,16 +256,13 @@ function startCalendar(api: DesktopApi): void {
     const status = upcomingEvent && now.getTime() < upcomingEvent.endAt
       ? eventStatus(upcomingEvent, now.getTime()).label
       : "";
-    const timerActive = Boolean(status);
-    const baseTitle = timerActive
-      ? status
-      : label.style === "none"
-      ? `${label.text ?? ""}${status ? ` | ${status}` : ""}`
-      : status ? `| ${status}` : "";
+    const baseTitle = label.style === "none" ? label.text ?? "" : "";
     // A slim leading rule mirrors the native pressed state while our custom
     // popover owns focus instead of an AppKit menu.
-    const title = calendarOpen ? `┃  ${baseTitle.replaceAll(" ", "\u2009")}` : baseTitle;
-    const trayStyle = timerActive ? "timer" : label.style;
+    const title = calendarOpen && baseTitle
+      ? `┃  ${baseTitle.replaceAll(" ", "\u2009")}`
+      : baseTitle;
+    const trayStyle = label.style;
     const signature = `${title}|${label.day ?? ""}|${trayStyle}`;
     if (signature === lastTrayLabel) return;
     lastTrayLabel = signature;
@@ -272,10 +270,16 @@ function startCalendar(api: DesktopApi): void {
     const framed = label.style === "framed" ? label.text : null;
     void api.setTrayLabel(
       title || null,
-      timerActive ? null : label.day,
+      label.day,
       trayStyle,
-      timerActive ? timerGlyphPng() : framed === null ? null : framedGlyphPng(framed),
+      framed === null ? null : framedGlyphPng(framed),
     );
+    const eventTitle = status ? status.replaceAll(" ", "\u2009") : null;
+    const eventSignature = `${eventTitle ?? ""}|${Boolean(eventTitle)}`;
+    if (eventSignature !== lastEventTrayLabel) {
+      lastEventTrayLabel = eventSignature;
+      void api.setEventTrayLabel(eventTitle, eventTitle ? timerGlyphPng() : null, Boolean(eventTitle));
+    }
   };
 
   const render = (opts?: { announceMonth?: boolean; focusGrid?: boolean }): void => {

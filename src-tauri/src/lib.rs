@@ -25,6 +25,7 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 const CALENDAR_LABEL: &str = "calendar";
 const SETTINGS_LABEL: &str = "settings";
 const TRAY_ID: &str = "calendo";
+const EVENT_TRAY_ID: &str = "calendo-event";
 const AUTOSTART_ARG: &str = "--autostart";
 const CALENDAR_WIDTH: f64 = 288.0;
 const CALENDAR_WIDTH_WEEKS: f64 = 312.0;
@@ -381,6 +382,22 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+    let event_tray = TrayIconBuilder::with_id(EVENT_TRAY_ID)
+        .tooltip("Upcoming event")
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                rect,
+                ..
+            } = event
+            {
+                toggle_calendar(tray.app_handle(), rect);
+            }
+        })
+        .build(app)?;
+    let _ = event_tray.set_visible(false);
     Ok(())
 }
 
@@ -561,6 +578,24 @@ fn set_tray_label(
     });
 }
 
+#[tauri::command]
+fn set_event_tray_label(app: AppHandle, title: Option<String>, image: Option<Vec<u8>>, visible: bool) {
+    let _ = app.clone().run_on_main_thread(move || {
+        let Some(tray) = app.tray_by_id(EVENT_TRAY_ID) else { return; };
+        if !visible {
+            let _ = tray.set_visible(false);
+            return;
+        }
+        if let Some(data) = image.as_deref() {
+            if let Ok(icon) = tauri::image::Image::from_bytes(data) {
+                let _ = tray.set_icon_with_as_template(Some(icon), true);
+            }
+        }
+        let _ = tray.set_title(title.as_deref());
+        let _ = tray.set_visible(true);
+    });
+}
+
 /// Plays the bundled hourly chime for both the clock and Settings preview.
 #[tauri::command]
 fn beep(app: AppHandle) -> Result<(), String> {
@@ -685,6 +720,7 @@ pub fn run() {
             get_settings,
             update_settings,
             set_tray_label,
+            set_event_tray_label,
             beep,
             hide_calendar,
             set_calendar_pinned,
