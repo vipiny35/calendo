@@ -80,8 +80,11 @@ html, body {
     color: AccentColorText;
   }
   .detail-row.interactive:hover .label,
+  .detail-row.interactive:hover .glyph svg,
   .event.declined.interactive:hover .title { color: inherit; opacity: 1; }
   .event.interactive:hover .dot { opacity: 1; }
+  /* A brand colour would fight the highlight, so marks borrow its ink. */
+  .detail-row.interactive:hover .glyph svg { fill: currentColor; stroke: currentColor; }
 }
 .event.interactive,
 .detail-row.interactive,

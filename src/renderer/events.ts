@@ -1,7 +1,9 @@
 import { endOfTomorrow, eventStatus, type EventResponse, type UpcomingEvent } from "../shared/events";
 import { installTauriBridge } from "./host";
 import { lucideIcon } from "./icons";
-import { MapPin, Video } from "lucide";
+import { meetingBrand } from "../shared/meetings";
+import { meetingIcon } from "./brand-icons";
+import { MapPin } from "lucide";
 
 const api = installTauriBridge();
 const list = document.getElementById("list")!;
@@ -17,15 +19,6 @@ function dayLabel(date: Date): string {
   if (iso(date) === iso(today)) return "Today";
   if (iso(date) === iso(tomorrow)) return "Tomorrow";
   return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(date);
-}
-
-function meetingLabel(url: string): string {
-  const host = (() => { try { return new URL(url).hostname; } catch { return ""; } })();
-  if (host.endsWith("meet.google.com")) return "Join Google Meet meeting";
-  if (host.endsWith("zoom.us")) return "Join Zoom meeting";
-  if (host.endsWith("teams.microsoft.com") || host.endsWith("teams.live.com")) return "Join Microsoft Teams meeting";
-  if (host.endsWith("webex.com")) return "Join Webex meeting";
-  return "Join meeting";
 }
 
 const RESPONSE_LABEL: Record<EventResponse, string> = {
@@ -96,7 +89,8 @@ function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
   details.className = "detail";
   if (event.joinUrl) {
     const url = event.joinUrl;
-    details.append(detailRow(lucideIcon(Video, 15), meetingLabel(url), () => {
+    const { brand, label } = meetingBrand(url);
+    details.append(detailRow(meetingIcon(brand, 15), label, () => {
       void api.joinMeeting(url);
       void api.hideEvents();
     }));
