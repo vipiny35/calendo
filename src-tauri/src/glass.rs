@@ -61,13 +61,19 @@ fn wrap_in_liquid_glass(ns_window: &AnyObject, radius: f64) -> bool {
             return false;
         }
         let _: () = msg_send![glass, setCornerRadius: radius];
+        // Without this the square content shows past the rounded material as
+        // a thin rectangle around the popover.
+        let _: () = msg_send![glass, setClipsToBounds: Bool::YES];
 
         let _: () = msg_send![ns_window, setContentView: glass];
         // NSViewWidthSizable | NSViewHeightSizable, so the webview keeps
         // filling the glass as the popover resizes to its content.
         let _: () = msg_send![previous, setAutoresizingMask: 18usize];
         let _: () = msg_send![glass, setContentView: previous];
+        round_corners(&*previous, radius);
         let _: () = msg_send![previous, release];
+        // The shadow was traced around the square frame this replaced.
+        let _: () = msg_send![ns_window, invalidateShadow];
         true
     }
 }
@@ -133,6 +139,20 @@ fn appearance_named(theme: &str) -> *mut AnyObject {
             return std::ptr::null_mut();
         }
         msg_send![class!(NSAppearance), appearanceNamed: string]
+    }
+}
+
+/// Clips a view and its layer to the popover's corner radius, so the webview
+/// cannot paint into the corners the material leaves round.
+fn round_corners(view: &AnyObject, radius: f64) {
+    unsafe {
+        let _: () = msg_send![view, setWantsLayer: Bool::YES];
+        let layer: *mut AnyObject = msg_send![view, layer];
+        if layer.is_null() {
+            return;
+        }
+        let _: () = msg_send![&*layer, setCornerRadius: radius];
+        let _: () = msg_send![&*layer, setMasksToBounds: Bool::YES];
     }
 }
 

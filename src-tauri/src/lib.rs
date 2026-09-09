@@ -12,7 +12,7 @@ use settings::{AppSettings, SettingsStore};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
@@ -87,7 +87,15 @@ struct AppState {
     /// Height of the display the events popover was last placed on, since a
     /// hidden window reports whichever screen it happens to rest on.
     events_screen_height: Mutex<f64>,
+    /// When blur last closed the calendar. A click on the tray icon arrives
+    /// just after the blur it caused, and without this the toggle would read
+    /// the popover as closed and open it straight back up.
+    calendar_closed_at: Mutex<Option<Instant>>,
 }
+
+/// How long after a blur-driven close a tray click still counts as the click
+/// that closed it.
+const REOPEN_GUARD: Duration = Duration::from_millis(300);
 
 fn calendar_width(show_week_numbers: bool) -> f64 {
     if show_week_numbers {
@@ -132,6 +140,9 @@ fn close_calendar(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
         let _ = window.hide();
         let _ = app.emit("calendar-hidden", ());
+    }
+    if let Ok(mut closed) = app.state::<AppState>().calendar_closed_at.lock() {
+        *closed = Some(Instant::now());
     }
     set_status_item_highlight(app, TRAY_ID, false);
 }
@@ -375,11 +386,18 @@ fn toggle_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
         .get_webview_window(CALENDAR_LABEL)
         .and_then(|window| window.is_visible().ok())
         .unwrap_or(false);
+    let just_closed = app
+        .state::<AppState>()
+        .calendar_closed_at
+        .lock()
+        .map(|closed| closed.is_some_and(|at| at.elapsed() < REOPEN_GUARD))
+        .unwrap_or(false);
     if visible {
-        app.state::<AppState>()
-            .ignore_calendar_blur
-            .store(true, Ordering::SeqCst);
         close_calendar(app);
+        return;
+    }
+    // This click is the one that closed it: the blur it caused got here first.
+    if just_closed {
         return;
     }
     show_calendar(app, tray_rect);
@@ -515,34 +533,18 @@ fn build_calendar_window(app: &AppHandle) -> tauri::Result<()> {
 
     let handle = app.clone();
     window.on_window_event(move |event| match event {
+        // Closing on the spot, rather than after a delay, keeps the popover
+        // from being left visible but inactive — long enough for the glass to
+        // paint its subdued state before the window goes away.
         WindowEvent::Focused(false) => {
-            let app = handle.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(180));
-                if app
-                    .state::<AppState>()
-                    .calendar_pinned
-                    .load(Ordering::SeqCst)
-                {
-                    return;
-                }
-                if app
-                    .state::<AppState>()
-                    .ignore_calendar_blur
-                    .swap(false, Ordering::SeqCst)
-                {
-                    return;
-                }
-                if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
-                    let focused = window.is_focused().unwrap_or(false);
-                    let visible = window.is_visible().unwrap_or(false);
-                    // Hiding the window alone leaves the status item lit and
-                    // the renderer thinking the popover is still open.
-                    if visible && !focused {
-                        close_calendar(&app);
-                    }
-                }
-            });
+            let state = handle.state::<AppState>();
+            if state.calendar_pinned.load(Ordering::SeqCst) {
+                return;
+            }
+            if state.ignore_calendar_blur.swap(false, Ordering::SeqCst) {
+                return;
+            }
+            close_calendar(&handle);
         }
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
@@ -913,6 +915,7 @@ pub fn run() {
                 ignore_calendar_blur: AtomicBool::new(false),
                 calendar_pinned: AtomicBool::new(false),
                 events_screen_height: Mutex::new(EVENTS_FALLBACK_SCREEN),
+                calendar_closed_at: Mutex::new(None),
             });
             set_launch_at_login(app.handle(), initial.launch_at_login);
             build_calendar_window(app.handle())?;
