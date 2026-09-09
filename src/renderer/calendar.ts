@@ -18,6 +18,7 @@ import { eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/event
 import { lucideIcon } from "./icons";
 import { eventGlyphPng, framedGlyphPng } from "./tray-frame";
 import { markPopoverMaterial } from "./popover-size";
+import { bandBox } from "./column-bands";
 import { installTauriBridge, type DesktopApi } from "./host";
 import { ChevronLeft, ChevronRight, CircleDot, Settings, Video } from "lucide";
 
@@ -83,23 +84,31 @@ function paintColumnHighlights(
   const lastRow = table.querySelector<HTMLElement>("tbody tr:last-child");
   if (!layer || headers.length < 7 || !firstBody || !lastRow) return;
   const wrapRect = wrap.getBoundingClientRect();
-  const top = firstBody.getBoundingClientRect().top - wrapRect.top;
-  const bottom = lastRow.getBoundingClientRect().bottom - wrapRect.top;
-  const inset = 2;
+  // The band covers the weekday letters as well as the dates below them.
+  const rows = {
+    top: headers[0]!.getBoundingClientRect().top,
+    bottom: lastRow.getBoundingClientRect().bottom,
+  };
   layer.replaceChildren(
     ...highlightedColumnRuns(settings.weekStartsOn, settings.highlightWeekdays).flatMap(
       (run) => {
         const start = headers[run.start];
         const end = headers[run.start + run.count - 1];
         if (!start || !end) return [];
-        const startRect = start.getBoundingClientRect();
-        const endRect = end.getBoundingClientRect();
+        const box = bandBox(
+          {
+            left: start.getBoundingClientRect().left,
+            right: end.getBoundingClientRect().right,
+          },
+          rows,
+          { left: wrapRect.left, top: wrapRect.top },
+        );
         const band = document.createElement("div");
         band.className = "column-highlight";
-        band.style.left = `${startRect.left - wrapRect.left + inset}px`;
-        band.style.width = `${Math.max(0, endRect.right - startRect.left - inset * 2)}px`;
-        band.style.top = `${top}px`;
-        band.style.height = `${Math.max(0, bottom - top)}px`;
+        band.style.left = `${box.left}px`;
+        band.style.width = `${box.width}px`;
+        band.style.top = `${box.top}px`;
+        band.style.height = `${box.height}px`;
         return [band];
       },
     ),
