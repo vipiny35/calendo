@@ -149,7 +149,6 @@ function startCalendar(api: DesktopApi): void {
   let calendarEvents: UpcomingEvent[] = [];
   let eventError: string | null = null;
   let eventRequest = 0;
-  let calendarOpen = false;
 
   const paintEvent = (): void => {
     eventCard.hidden = true;
@@ -241,12 +240,9 @@ function startCalendar(api: DesktopApi): void {
     const status = upcomingEvent && now.getTime() < upcomingEvent.endAt
       ? eventStatus(upcomingEvent, now.getTime()).label
       : "";
-    const baseTitle = label.style === "none" ? label.text ?? "" : "";
-    // A slim leading rule mirrors the native pressed state while our custom
-    // popover owns focus instead of an AppKit menu.
-    const title = calendarOpen && baseTitle
-      ? `┃  ${baseTitle.replaceAll(" ", "\u2009")}`
-      : baseTitle;
+    // The status item carries the real pressed highlight now, so the title
+    // stays as it reads when the popover is closed.
+    const title = label.style === "none" ? label.text ?? "" : "";
     const trayStyle = label.style;
     const signature = `${title}|${label.day ?? ""}|${trayStyle}`;
     // A hair space keeps "2h 21m" from reading as one long number without
@@ -526,14 +522,9 @@ function startCalendar(api: DesktopApi): void {
     void refreshUpcoming();
   });
   api.onCalendarShown(() => {
-    calendarOpen = true;
     refreshTray();
     render({ focusGrid: true });
     void refreshUpcoming();
-  });
-  api.onCalendarHidden(() => {
-    calendarOpen = false;
-    refreshTray();
   });
 }
 
