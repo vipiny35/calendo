@@ -10,7 +10,7 @@ mod settings;
 
 use settings::{AppSettings, SettingsStore};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -91,6 +91,11 @@ struct AppState {
     /// just after the blur it caused, and without this the toggle would read
     /// the popover as closed and open it straight back up.
     calendar_closed_at: Mutex<Option<Instant>>,
+    events_closed_at: Mutex<Option<Instant>>,
+    /// Counts each fade, so the hide that follows one belongs to it. Reopening
+    /// mid-fade bumps the count and the pending hide stands down.
+    calendar_fade: AtomicU64,
+    events_fade: AtomicU64,
 }
 
 /// How long after a blur-driven close a tray click still counts as the click
@@ -136,20 +141,72 @@ fn set_launch_at_login(app: &AppHandle, enabled: bool) {
     };
 }
 
-fn close_calendar(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
-        let _ = window.hide();
-        let _ = app.emit("calendar-hidden", ());
+fn fade_counter<'a>(state: &'a AppState, label: &str) -> &'a AtomicU64 {
+    if label == CALENDAR_LABEL {
+        &state.calendar_fade
+    } else {
+        &state.events_fade
     }
-    if let Ok(mut closed) = app.state::<AppState>().calendar_closed_at.lock() {
+}
+
+fn closed_at<'a>(state: &'a AppState, label: &str) -> &'a Mutex<Option<Instant>> {
+    if label == CALENDAR_LABEL {
+        &state.calendar_closed_at
+    } else {
+        &state.events_closed_at
+    }
+}
+
+/// Dissolves the popover the way a menu extra does, then hides it. A reopen
+/// during the fade cancels the hide and restores full opacity.
+fn fade_out_and_hide(app: &AppHandle, label: &'static str) {
+    let Some(window) = app.get_webview_window(label) else {
+        return;
+    };
+    if !window.is_visible().unwrap_or(false) {
+        return;
+    }
+    let generation = fade_counter(&app.state::<AppState>(), label).fetch_add(1, Ordering::SeqCst) + 1;
+    glass::fade_out(&window);
+
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(glass::FADE);
+        let app = handle.clone();
+        let _ = handle.run_on_main_thread(move || {
+            if fade_counter(&app.state::<AppState>(), label).load(Ordering::SeqCst) != generation {
+                return;
+            }
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.hide();
+                glass::clear_fade(&window);
+            }
+        });
+    });
+}
+
+/// Cancels a fade in flight and brings the window back to full opacity, so an
+/// immediate reopen shows a solid popover rather than a half-faded one.
+fn cancel_fade(app: &AppHandle, label: &'static str) {
+    fade_counter(&app.state::<AppState>(), label).fetch_add(1, Ordering::SeqCst);
+    if let Some(window) = app.get_webview_window(label) {
+        glass::clear_fade(&window);
+    }
+}
+
+fn close_calendar(app: &AppHandle) {
+    fade_out_and_hide(app, CALENDAR_LABEL);
+    let _ = app.emit("calendar-hidden", ());
+    if let Ok(mut closed) = closed_at(&app.state::<AppState>(), CALENDAR_LABEL).lock() {
         *closed = Some(Instant::now());
     }
     set_status_item_highlight(app, TRAY_ID, false);
 }
 
 fn close_events(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(EVENTS_LABEL) {
-        let _ = window.hide();
+    fade_out_and_hide(app, EVENTS_LABEL);
+    if let Ok(mut closed) = closed_at(&app.state::<AppState>(), EVENTS_LABEL).lock() {
+        *closed = Some(Instant::now());
     }
     set_status_item_highlight(app, EVENT_TRAY_ID, false);
 }
@@ -370,6 +427,7 @@ fn position_events(app: &AppHandle, tray_rect: tauri::Rect) {
 
 fn show_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
     close_events(app);
+    cancel_fade(app, CALENDAR_LABEL);
     position_calendar(app, tray_rect);
     if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
         let _ = window.show();
@@ -392,12 +450,13 @@ fn toggle_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
         .lock()
         .map(|closed| closed.is_some_and(|at| at.elapsed() < REOPEN_GUARD))
         .unwrap_or(false);
-    if visible {
-        close_calendar(app);
+    // This click is the one that closed it: the blur it caused got here
+    // first, and the popover may still be fading out.
+    if just_closed {
         return;
     }
-    // This click is the one that closed it: the blur it caused got here first.
-    if just_closed {
+    if visible {
+        close_calendar(app);
         return;
     }
     show_calendar(app, tray_rect);
@@ -405,6 +464,7 @@ fn toggle_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
 
 fn show_events(app: &AppHandle, tray_rect: tauri::Rect) {
     close_calendar(app);
+    cancel_fade(app, EVENTS_LABEL);
     position_events(app, tray_rect);
     let Some(window) = app.get_webview_window(EVENTS_LABEL) else { return; };
     let _ = window.show();
@@ -418,7 +478,15 @@ fn toggle_events(app: &AppHandle, tray_rect: tauri::Rect) {
         .get_webview_window(EVENTS_LABEL)
         .and_then(|window| window.is_visible().ok())
         .unwrap_or(false);
-    if visible { close_events(app); } else { show_events(app, tray_rect); }
+    let just_closed = closed_at(&app.state::<AppState>(), EVENTS_LABEL)
+        .lock()
+        .map(|closed| closed.is_some_and(|at| at.elapsed() < REOPEN_GUARD))
+        .unwrap_or(false);
+    if visible {
+        close_events(app);
+    } else if !just_closed {
+        show_events(app, tray_rect);
+    }
 }
 
 fn present_settings(app: &AppHandle) {
@@ -916,6 +984,9 @@ pub fn run() {
                 calendar_pinned: AtomicBool::new(false),
                 events_screen_height: Mutex::new(EVENTS_FALLBACK_SCREEN),
                 calendar_closed_at: Mutex::new(None),
+                events_closed_at: Mutex::new(None),
+                calendar_fade: AtomicU64::new(0),
+                events_fade: AtomicU64::new(0),
             });
             set_launch_at_login(app.handle(), initial.launch_at_login);
             build_calendar_window(app.handle())?;

@@ -29,6 +29,49 @@ pub fn is_liquid_glass() -> bool {
     LIQUID_GLASS.load(Ordering::SeqCst)
 }
 
+/// A system menu extra dissolves rather than blinking out; this is about the
+/// length AppKit takes over it.
+pub const FADE: std::time::Duration = std::time::Duration::from_millis(160);
+
+fn window_object(window: &tauri::WebviewWindow) -> Option<&AnyObject> {
+    let pointer = window.ns_window().ok()?;
+    if pointer.is_null() {
+        return None;
+    }
+    Some(unsafe { &*(pointer as *mut AnyObject) })
+}
+
+/// Animates the popover's alpha to zero. The window is still on screen when
+/// this returns: the caller hides it once the fade has run.
+pub fn fade_out(window: &tauri::WebviewWindow) {
+    let Some(ns_window) = window_object(window) else {
+        return;
+    };
+    unsafe {
+        let context = class!(NSAnimationContext);
+        let _: () = msg_send![context, beginGrouping];
+        let current: *mut AnyObject = msg_send![context, currentContext];
+        if !current.is_null() {
+            let _: () = msg_send![&*current, setDuration: FADE.as_secs_f64()];
+        }
+        let animator: *mut AnyObject = msg_send![ns_window, animator];
+        if !animator.is_null() {
+            let _: () = msg_send![&*animator, setAlphaValue: 0.0f64];
+        }
+        let _: () = msg_send![context, endGrouping];
+    }
+}
+
+/// Back to full opacity, for the next time the popover opens.
+pub fn clear_fade(window: &tauri::WebviewWindow) {
+    let Some(ns_window) = window_object(window) else {
+        return;
+    };
+    unsafe {
+        let _: () = msg_send![ns_window, setAlphaValue: 1.0f64];
+    }
+}
+
 /// AppKit's Liquid Glass view, which arrived in macOS 26. Absent before that,
 /// so it is looked up by name and the vibrancy view stands in.
 fn glass_effect_class() -> Option<&'static AnyClass> {
