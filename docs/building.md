@@ -36,6 +36,34 @@ submits, so `scripts/release-dmg.mjs` submits and staples the image as well and
 ends on `spctl --assess`, which has to accept it. For a quick local build that
 skips all of this, run `pnpm tauri build --bundles dmg` directly.
 
+### Updates
+
+Installed copies update themselves. The app reads
+`releases/latest/download/latest.json`, and the payload it downloads is signed
+with a key held at `~/.calendo/updater.key`, outside the repository; its public
+half is in `tauri.conf.json`. **Keep a backup of that key.** An update signed
+with any other key is refused by every copy already installed, so losing it
+means installed apps can never be updated again. `TAURI_SIGNING_PRIVATE_KEY`
+overrides the path, for CI.
+
+`pnpm dmg` writes `latest.json` alongside the disk image and prints the three
+files a release needs:
+
+- `Calendo_<version>_aarch64.dmg` — for people installing by hand
+- `Calendo.app.tar.gz` — what installed copies download
+- `latest.json` — what installed copies read
+
+A release missing `latest.json` offers no update at all; one missing the
+payload offers a broken download. Publish all three together:
+
+```bash
+gh release create v<version> --target main <dmg> <tar.gz> <latest.json>
+```
+
+`pnpm dmg` refuses to build without either the notarization credentials or the
+signing key, rather than producing a release that looks fine and updates
+nothing.
+
 `pnpm icon` regenerates `icons/icon.png`, `icons/icon.icns`,
 `icons/tray-icon.png`, `icons/tray/calendar.png`, and
 `icons/tray/filled/day-01.png` through `day-31.png` from

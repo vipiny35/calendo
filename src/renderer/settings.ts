@@ -110,6 +110,7 @@ function startSettings(api: DesktopApi): void {
   const theme = requireElement<HTMLSelectElement>("theme");
   const version = requireElement<HTMLParagraphElement>("version");
   const checkUpdates = requireElement<HTMLButtonElement>("check-updates");
+  const installUpdate = requireElement<HTMLButtonElement>("install-update");
   const updateStatus = requireElement<HTMLParagraphElement>("update-status");
 
   buildIconStyles(iconStyles);
@@ -254,18 +255,40 @@ function startSettings(api: DesktopApi): void {
 
   const checkForUpdates = async (): Promise<void> => {
     updateStatus.textContent = "Checking…";
+    installUpdate.hidden = true;
     try {
-      const latest = await api.checkForUpdates();
-      const current = await api.getAppVersion();
-      updateStatus.textContent = latest === current || latest === `v${current}`
-        ? "Calendo is up to date."
-        : `Update available: ${latest}`;
+      const offer = await api.checkForUpdates();
+      if (!offer.version) {
+        updateStatus.textContent = "Calendo is up to date.";
+        return;
+      }
+      updateStatus.textContent = `Version ${offer.version} is available.`;
+      installUpdate.textContent = `Update to ${offer.version} and Restart`;
+      installUpdate.hidden = false;
     } catch (error) {
       const detail = typeof error === "string" ? error : "Could not reach update server";
       updateStatus.textContent = `Update check failed: ${detail}`;
     }
   };
   checkUpdates.addEventListener("click", () => void checkForUpdates());
+
+  // The app relaunches itself when this finishes, so success needs no message.
+  installUpdate.addEventListener("click", () => {
+    installUpdate.disabled = true;
+    checkUpdates.disabled = true;
+    updateStatus.textContent = "Downloading…";
+    void api.installUpdate().catch((error: unknown) => {
+      const detail = typeof error === "string" ? error : "Update failed";
+      updateStatus.textContent = detail;
+      installUpdate.disabled = false;
+      checkUpdates.disabled = false;
+    });
+  });
+  api.onUpdateProgress(({ downloaded, total }) => {
+    updateStatus.textContent = total
+      ? `Downloading… ${Math.min(100, Math.round((downloaded / total) * 100))}%`
+      : "Downloading…";
+  });
 
   void api.getSettings().then((settings) => {
     paint(settings);

@@ -8,6 +8,7 @@ mod beep;
 mod events;
 mod settings;
 
+use serde::Serialize;
 use settings::{AppSettings, SettingsStore};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -21,6 +22,7 @@ use tauri::{
     WindowEvent,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
+use tauri_plugin_updater::UpdaterExt;
 
 const CALENDAR_LABEL: &str = "calendar";
 const EVENTS_LABEL: &str = "events";
@@ -936,38 +938,70 @@ fn app_version(app: AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
+/// What a check found. `version` is empty when the running build is current.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateOffer {
+    version: String,
+    notes: String,
+}
+
+/// Asks the updater endpoint, which serves the manifest a release publishes.
+/// The plugin verifies the manifest's signature against the public key built
+/// into the app, so an unsigned or tampered update is refused here.
 #[tauri::command]
-fn check_for_updates() -> Result<String, String> {
-    let output = std::process::Command::new("/usr/bin/curl")
-        .args([
-            "-fsSL",
-            "--retry", "2",
-            "--connect-timeout", "10",
-            "https://api.github.com/repos/vipiny35/calendo/releases/latest",
-            "-H", "Accept: application/vnd.github+json",
-            "-H", "User-Agent: Calendo",
-        ])
-        .output()
-        .map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        return Err(if detail.is_empty() {
-            format!("Update server request failed ({})", output.status)
-        } else {
-            detail
-        });
+async fn check_for_updates(app: AppHandle) -> Result<UpdateOffer, String> {
+    let updater = app.updater().map_err(|error| error.to_string())?;
+    match updater.check().await {
+        Ok(Some(update)) => Ok(UpdateOffer {
+            version: update.version.clone(),
+            notes: update.body.clone().unwrap_or_default(),
+        }),
+        Ok(None) => Ok(UpdateOffer {
+            version: String::new(),
+            notes: String::new(),
+        }),
+        Err(error) => Err(error.to_string()),
     }
-    let json: serde_json::Value = serde_json::from_slice(&output.stdout)
+}
+
+/// Downloads the update, replaces the app bundle, and relaunches. Progress
+/// goes out as `update-progress` events carrying bytes downloaded of the
+/// total, so the window can show something while it works.
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    let updater = app.updater().map_err(|error| error.to_string())?;
+    let Some(update) = updater.check().await.map_err(|error| error.to_string())? else {
+        return Err("Calendo is already up to date".into());
+    };
+
+    let progress = app.clone();
+    let mut downloaded = 0usize;
+    update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk;
+                let _ = progress.emit(
+                    "update-progress",
+                    serde_json::json!({
+                        "downloaded": downloaded,
+                        "total": total,
+                    }),
+                );
+            },
+            || {},
+        )
+        .await
         .map_err(|error| error.to_string())?;
-    json.get("tag_name")
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| "No release found".into())
+
+    // The bundle on disk is the new one now; nothing here survives the swap.
+    app.restart();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec![AUTOSTART_ARG]),
@@ -1012,6 +1046,7 @@ pub fn run() {
             quit_app,
             app_version,
             check_for_updates,
+            install_update,
             get_upcoming_event,
             get_calendar_events,
             request_calendar_access,
