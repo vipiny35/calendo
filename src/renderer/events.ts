@@ -33,6 +33,10 @@ async function load(): Promise<void> {
       const title = document.createElement("span"); title.className = "title"; title.textContent = event.title;
       item.append(dot, time, title); nodes.push(item); return nodes;
     }).flat());
-  } catch (error) { summary.textContent = "Could not load events"; list.innerHTML = `<p class="empty">${error instanceof Error ? error.message : "Try again shortly."}</p>`; }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    summary.textContent = detail.toLowerCase().includes("access") ? "Calendar access needed" : "Could not load events";
+    list.innerHTML = `<p class="empty">${detail || "Try again shortly."}</p>`;
+  }
 }
 void load();
