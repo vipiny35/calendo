@@ -79,10 +79,10 @@ export function framedGlyphMask(text: string): string {
  */
 const EVENT_BOX = 44;
 /** Slim rounded mark that leads the countdown. */
-const PILL_WIDTH = 6;
+const PILL_WIDTH = 4;
 const PILL_HEIGHT = 30;
 /** Transparent run between the mark and the countdown. */
-const PILL_GAP = 12;
+const PILL_GAP = 16;
 /** 13pt at 2x, a shade heavier than the regular system title. */
 const EVENT_FONT = '500 26px -apple-system, "SF Pro Text", system-ui, sans-serif';
 

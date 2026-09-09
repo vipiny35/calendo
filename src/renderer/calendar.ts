@@ -239,7 +239,9 @@ function startCalendar(api: DesktopApi): void {
       : baseTitle;
     const trayStyle = label.style;
     const signature = `${title}|${label.day ?? ""}|${trayStyle}`;
-    const eventTitle = status ? status.replace(/(\d+)([hm])/g, "$1 $2") : null;
+    // A hair space keeps "2h 21m" from reading as one long number without
+    // opening the full word space the menu bar font would otherwise give it.
+    const eventTitle = status ? status.replace(/(\d+)([hm])/g, "$1\u200a$2") : null;
     const eventSignature = `${eventTitle ?? ""}|${Boolean(eventTitle)}`;
     if (eventSignature !== lastEventTrayLabel) {
       lastEventTrayLabel = eventSignature;
