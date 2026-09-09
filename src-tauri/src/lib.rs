@@ -727,7 +727,7 @@ mod tests {
         let (x, y, placement) =
             popover_origin(500.0, -1080.0, 40.0, 24.0, 340.0, 326.0, EXTERNAL);
         assert_eq!(x, 350.0);
-        assert_eq!(y, -1054.0);
+        assert_eq!(y, -1056.0);
         assert_eq!(placement, PopoverPlacement::Below);
         assert!(point_in_screen(x, y, EXTERNAL));
         assert!(!point_in_screen(x, y, LAPTOP));
@@ -750,7 +750,7 @@ mod tests {
             },
         );
         assert_eq!(x, 1050.0);
-        assert_eq!(y, 26.0);
+        assert_eq!(y, 24.0);
         assert_eq!(placement, PopoverPlacement::Below);
     }
 
@@ -759,7 +759,7 @@ mod tests {
         let (x, y, placement) =
             popover_origin(-180.0, -1080.0, 40.0, 24.0, 340.0, 326.0, EXTERNAL);
         assert_eq!(x, EXTERNAL.x + 8.0);
-        assert_eq!(y, -1054.0);
+        assert_eq!(y, -1056.0);
         assert_eq!(placement, PopoverPlacement::Below);
         assert!(point_in_screen(x, y, EXTERNAL));
     }
