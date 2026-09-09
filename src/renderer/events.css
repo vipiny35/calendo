@@ -4,6 +4,9 @@
   --muted: #929296;
   --hover: rgba(255, 255, 255, 0.09);
   --rule: rgba(255, 255, 255, 0.13);
+  /* Tints the menu material behind the webview rather than replacing it. */
+  --scrim: rgb(0 0 0 / 22%);
+  --rim: rgb(255 255 255 / 12%);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
 }
 @media (prefers-color-scheme: light) {
@@ -12,6 +15,8 @@
     --muted: #727276;
     --hover: rgba(0, 0, 0, 0.07);
     --rule: rgba(0, 0, 0, 0.11);
+    --scrim: rgb(255 255 255 / 16%);
+    --rim: rgb(0 0 0 / 12%);
   }
 }
 * { box-sizing: border-box; }
@@ -28,6 +33,9 @@ html, body {
   height: 100%;
   flex-direction: column;
   padding: 8px 6px;
+  border-radius: 12px;
+  background: var(--scrim);
+  box-shadow: inset 0 0 0 0.5px var(--rim);
   color: var(--ink);
 }
 /* The list gives way first, so the footer stays put once the popover is

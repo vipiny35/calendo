@@ -2,8 +2,13 @@
 //!
 //! CSS backdrop-filter only blurs what is already inside the webview, so the
 //! card would read as a flat slab without an AppKit view under a transparent
-//! WKWebView. `NSVisualEffectView` with the Popover material is what a real
-//! menu-bar extra uses, and it follows the window's light or dark appearance.
+//! WKWebView. `NSVisualEffectView` carries the real material, and it follows
+//! the window's light or dark appearance.
+//!
+//! The material is Menu (NSVisualEffectMaterialMenu), which is what AppKit
+//! menus and the system's own menu bar panels — Wi-Fi, Sound, Control Centre —
+//! are drawn with. Popover is the material of a view-anchored popover and
+//! reads noticeably lighter and thinner beside them.
 //!
 //! The effect view fills the popover window.
 
@@ -25,7 +30,7 @@ pub fn apply_calendar_glass(window: &tauri::WebviewWindow) {
 
     let _ = apply_vibrancy(
         window,
-        NSVisualEffectMaterial::Popover,
+        NSVisualEffectMaterial::Menu,
         Some(NSVisualEffectState::Active),
         Some(CORNER_RADIUS),
     );
