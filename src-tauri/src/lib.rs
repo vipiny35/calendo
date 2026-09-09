@@ -965,6 +965,25 @@ async fn check_for_updates(app: AppHandle) -> Result<UpdateOffer, String> {
     }
 }
 
+/// The release page, for when an update cannot be applied and the only way
+/// forward is a hand-installed disk image.
+const RELEASES_URL: &str = "https://github.com/vipiny35/calendo/releases/latest";
+
+/// An update that will not verify is not a transient failure: this build's
+/// public key cannot attribute it to whoever signs releases, and no retry
+/// changes that. Say so plainly and point at the disk image.
+fn install_failure(error: tauri_plugin_updater::Error) -> String {
+    if matches!(error, tauri_plugin_updater::Error::Minisign(_)) {
+        return "This update couldn't be verified — download the latest version from GitHub".into();
+    }
+    error.to_string()
+}
+
+#[tauri::command]
+fn open_releases_page() -> Result<(), String> {
+    events::open_meeting(RELEASES_URL)
+}
+
 /// Downloads the update, replaces the app bundle, and relaunches. Progress
 /// goes out as `update-progress` events carrying bytes downloaded of the
 /// total, so the window can show something while it works.
@@ -992,7 +1011,7 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
             || {},
         )
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(install_failure)?;
 
     // The bundle on disk is the new one now; nothing here survives the swap.
     app.restart();
@@ -1047,6 +1066,7 @@ pub fn run() {
             app_version,
             check_for_updates,
             install_update,
+            open_releases_page,
             get_upcoming_event,
             get_calendar_events,
             request_calendar_access,

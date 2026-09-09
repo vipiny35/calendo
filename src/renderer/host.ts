@@ -33,6 +33,7 @@ export type DesktopApi = {
   openEvent: (id: string) => Promise<void>;
   checkForUpdates: () => Promise<UpdateOffer>;
   installUpdate: () => Promise<void>;
+  openReleasesPage: () => Promise<void>;
   onUpdateProgress: (
     listener: (progress: { downloaded: number; total: number | null }) => void,
   ) => () => void;
@@ -101,6 +102,7 @@ export const api: DesktopApi = {
   openEvent: (id) => invoke<void>("open_event", { id }),
   checkForUpdates: () => invoke<UpdateOffer>("check_for_updates"),
   installUpdate: () => invoke<void>("install_update"),
+  openReleasesPage: () => invoke<void>("open_releases_page"),
   onUpdateProgress: (listener) =>
     subscribe<{ downloaded: number; total: number | null }>(
       "update-progress",

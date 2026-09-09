@@ -437,6 +437,23 @@ input[type="checkbox"] {
   margin-top: 8px;
 }
 
+/* A button, not an anchor: the webview must not navigate away, so the click
+   hands the address to the system browser instead. */
+.link {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
 .about-link {
   margin-top: 8px;
   color: var(--accent);
