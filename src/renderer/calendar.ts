@@ -142,35 +142,8 @@ function startCalendar(api: DesktopApi): void {
   let calendarOpen = false;
 
   const paintEvent = (): void => {
-    const enabled = settings?.showUpcomingEvent ?? false;
-    eventCard.hidden = !enabled;
-    calendarAccess.hidden = !enabled || !eventError;
-    if (!enabled) return;
-    if (!upcomingEvent) {
-      eventStatusLabel.textContent = eventError ? "Calendar access needed" : "No upcoming events";
-      eventTitle.textContent = eventError ? "Allow Calendar access" : "Your calendar is clear";
-      eventMeta.textContent = eventError
-        ? "Enable Calendar access in System Settings to show meetings."
-        : "New events will appear here automatically.";
-      joinMeeting.hidden = true;
-      return;
-    }
-    const status = eventStatus(upcomingEvent);
-    if (status.label === "No upcoming events") {
-      eventCard.hidden = true;
-      joinMeeting.hidden = true;
-      return;
-    }
-    eventStatusLabel.textContent = status.label;
-    eventTitle.textContent = upcomingEvent.title;
-    eventMeta.textContent = [
-      eventTimeRange(upcomingEvent),
-      upcomingEvent.calendar,
-      upcomingEvent.location,
-    ]
-      .filter((value): value is string => Boolean(value))
-      .join(" · ");
-    joinMeeting.hidden = !upcomingEvent.joinUrl;
+    eventCard.hidden = true;
+    calendarAccess.hidden = true;
   };
 
   const refreshUpcoming = async (): Promise<void> => {
@@ -187,10 +160,13 @@ function startCalendar(api: DesktopApi): void {
     try {
       const monthStart = new Date(viewYear, viewMonth, 1);
       const monthEnd = new Date(viewYear, viewMonth + 1, 1);
-      const [nextEvent, monthEvents] = await Promise.all([
-        api.getUpcomingEvent(),
-        api.getCalendarEvents(monthStart.getTime(), monthEnd.getTime()),
-      ]);
+      const nextEvent = await api.getUpcomingEvent();
+      let monthEvents: UpcomingEvent[] = [];
+      try {
+        monthEvents = await api.getCalendarEvents(monthStart.getTime(), monthEnd.getTime());
+      } catch {
+        // Calendar grid decorations belong to the events popover and are optional.
+      }
       if (request !== eventRequest) return;
       upcomingEvent = nextEvent;
       calendarEvents = monthEvents;
@@ -208,9 +184,8 @@ function startCalendar(api: DesktopApi): void {
   };
 
   const paintDayEvents = (): void => {
-    const enabled = settings?.showUpcomingEvent ?? false;
-    dayEvents.hidden = !enabled || Boolean(eventError);
-    if (!enabled) return;
+    dayEvents.hidden = true;
+    return;
     const selectedDate = fromIso(focusIso);
     dayEventsTitle.textContent = new Intl.DateTimeFormat(undefined, {
       weekday: "long",
@@ -346,18 +321,7 @@ function startCalendar(api: DesktopApi): void {
         const number = document.createElement("span");
         number.className = "day-number";
         number.textContent = String(day.day);
-        const dots = document.createElement("span");
-        dots.className = "day-event-dots";
-        const eventCount = calendarEvents.filter(
-          (event) => toIso(new Date(event.startAt)) === day.iso,
-        ).length;
-        for (let index = 0; index < Math.min(3, eventCount); index += 1) {
-          const dot = document.createElement("span");
-          dot.className = "day-event-dot";
-          dot.setAttribute("aria-hidden", "true");
-          dots.append(dot);
-        }
-        button.append(number, dots);
+        button.append(number);
         button.setAttribute("aria-label", dayName(fromIso(day.iso)));
         if (day.inMonth) button.classList.add("is-in-month");
         else button.classList.add("is-outside");
