@@ -104,6 +104,7 @@ function startSettings(api: DesktopApi): void {
   const showUpcoming = requireElement<HTMLInputElement>("show-upcoming");
   const calendarAccessStatus = requireElement<HTMLParagraphElement>("calendar-access-status");
   const calendarAccess = requireElement<HTMLButtonElement>("calendar-access");
+  const calendarAccessRow = requireElement<HTMLElement>("calendar-access-row");
   const beepPreview = requireElement<HTMLButtonElement>("beep-preview");
   const theme = requireElement<HTMLSelectElement>("theme");
   const version = requireElement<HTMLParagraphElement>("version");
@@ -222,6 +223,7 @@ function startSettings(api: DesktopApi): void {
     calendarAccess.disabled = true;
     void api.requestCalendarAccess()
       .then((granted) => {
+        calendarAccessRow.hidden = granted;
         calendarAccessStatus.textContent = granted
           ? "Calendar access enabled."
           : "Allow Calendar access in System Settings.";
@@ -285,6 +287,9 @@ function startSettings(api: DesktopApi): void {
   void api.getSettings().then((settings) => {
     paint(settings);
     if (settings.autoUpdate) void checkForUpdates();
+    void api.getCalendarAccess().then((granted) => {
+      calendarAccessRow.hidden = granted;
+    });
   });
   void api.getAppVersion().then((value) => {
     version.textContent = value;

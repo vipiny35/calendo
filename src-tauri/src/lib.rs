@@ -612,6 +612,11 @@ async fn request_calendar_access() -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn get_calendar_access() -> bool {
+    events::has_access()
+}
+
+#[tauri::command]
 fn join_meeting(url: String) -> Result<(), String> {
     events::open_meeting(&url)
 }
@@ -690,6 +695,7 @@ pub fn run() {
             get_upcoming_event,
             get_calendar_events,
             request_calendar_access,
+            get_calendar_access,
             join_meeting,
         ])
         .run(tauri::generate_context!())

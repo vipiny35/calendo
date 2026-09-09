@@ -189,6 +189,15 @@ pub fn fetch_upcoming() -> Result<Option<UpcomingEvent>, String> {
     }
 }
 
+#[cfg(target_os = "macos")]
+pub fn has_access() -> bool {
+    use objc2_event_kit::{EKAuthorizationStatus, EKEntityType, EKEventStore};
+    unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) == EKAuthorizationStatus::FullAccess }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn has_access() -> bool { false }
+
 pub fn fetch_range(start_ms: i64, end_ms: i64) -> Result<Vec<UpcomingEvent>, String> {
     #[cfg(target_os = "macos")]
     {

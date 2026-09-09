@@ -24,6 +24,7 @@ export type DesktopApi = {
   getUpcomingEvent: () => Promise<UpcomingEvent | null>;
   getCalendarEvents: (startAt: number, endAt: number) => Promise<UpcomingEvent[]>;
   requestCalendarAccess: () => Promise<boolean>;
+  getCalendarAccess: () => Promise<boolean>;
   joinMeeting: (url: string) => Promise<void>;
   checkForUpdates: () => Promise<string>;
   hideCalendar: () => Promise<void>;
@@ -80,6 +81,7 @@ export const api: DesktopApi = {
   getCalendarEvents: (startAt, endAt) =>
     invoke<UpcomingEvent[]>("get_calendar_events", { startAt, endAt }),
   requestCalendarAccess: () => invoke<boolean>("request_calendar_access"),
+  getCalendarAccess: () => invoke<boolean>("get_calendar_access"),
   joinMeeting: (url) => invoke<void>("join_meeting", { url }),
   checkForUpdates: () => invoke<string>("check_for_updates"),
   hideCalendar: () => invoke<void>("hide_calendar"),
