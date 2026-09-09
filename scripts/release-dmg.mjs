@@ -10,12 +10,27 @@
  * APPLE_SIGNING_IDENTITY. CI can pass them as environment variables instead.
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
+import { payloadUrl, updaterManifest } from "./updater-manifest.mjs";
 
 const ENV_FILE = ".env.notarization";
 const DMG_DIR = "src-tauri/target/release/bundle/dmg";
+const MACOS_DIR = "src-tauri/target/release/bundle/macos";
 const REQUIRED = ["APPLE_ID", "APPLE_TEAM_ID", "APPLE_PASSWORD"];
+/// Where the update signing key lives, in order of preference. It sits with
+/// the other macOS signing material rather than in the repository: it cannot
+/// be revoked or rotated, since every installed copy trusts exactly the one
+/// key compiled into it.
+const SIGNING_KEYS = [
+  join(
+    homedir(),
+    "Library/CloudStorage/OneDrive-Personal/keys/macos-dev/updater.key",
+  ),
+  join(homedir(), ".calendo", "updater.key"),
+];
+const REPOSITORY = "vipiny35/calendo";
 
 function loadCredentials() {
   if (!existsSync(ENV_FILE)) return;
@@ -37,6 +52,56 @@ function run(command, args, label) {
   }
 }
 
+/// The private key signs the update payload; without it the app would refuse
+/// every update it is offered.
+function loadSigningKey() {
+  if (process.env.TAURI_SIGNING_PRIVATE_KEY) return;
+  const key = SIGNING_KEYS.find((path) => existsSync(path));
+  if (!key) {
+    console.error(
+      `No update signing key found. Looked in:\n` +
+        SIGNING_KEYS.map((path) => `  ${path}`).join("\n") +
+        `\n\nSet TAURI_SIGNING_PRIVATE_KEY to its path, or generate one with:\n` +
+        `  pnpm tauri signer generate -w ${SIGNING_KEYS[0]}\n\n` +
+        `A new key orphans every copy already installed: they trust only the\n` +
+        `key compiled into them, and would need a manual reinstall.`,
+    );
+    process.exit(1);
+  }
+  process.env.TAURI_SIGNING_PRIVATE_KEY = key;
+  process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ??= "";
+}
+
+function findOne(directory, suffix, label) {
+  const files = existsSync(directory)
+    ? readdirSync(directory).filter((name) => name.endsWith(suffix))
+    : [];
+  if (files.length !== 1) {
+    console.error(
+      `Expected exactly one ${label} in ${directory}, found ${files.length}.`,
+    );
+    process.exit(1);
+  }
+  return join(directory, files[0]);
+}
+
+/// Writes the manifest the app fetches, pointing at the payload this tag will
+/// publish. The version comes from the build, so the two cannot drift.
+function writeManifest(version) {
+  const payload = findOne(MACOS_DIR, ".app.tar.gz", "update payload");
+  const signature = readFileSync(`${payload}.sig`, "utf8").trim();
+  const tag = `v${version}`;
+  const manifest = updaterManifest({
+    version,
+    notes: `See https://github.com/${REPOSITORY}/releases/tag/${tag}`,
+    signature,
+    url: payloadUrl({ repository: REPOSITORY, tag, file: payload.split("/").pop() }),
+  });
+  const path = join(DMG_DIR, "latest.json");
+  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
+  return { manifest: path, payload, signature: `${payload}.sig` };
+}
+
 function newestDmg() {
   const files = readdirSync(DMG_DIR)
     .filter((name) => name.endsWith(".dmg"))
@@ -49,6 +114,7 @@ function newestDmg() {
 }
 
 loadCredentials();
+loadSigningKey();
 
 const missing = REQUIRED.filter((key) => !process.env[key]);
 if (missing.length) {
@@ -60,7 +126,8 @@ if (missing.length) {
   process.exit(1);
 }
 
-run("pnpm", ["tauri", "build", "--bundles", "dmg"], "Bundling");
+// The updater payload is built from the app bundle, so both targets run.
+run("pnpm", ["tauri", "build", "--bundles", "app,dmg"], "Bundling");
 
 const dmg = newestDmg();
 console.log(`\nNotarizing ${dmg}`);
@@ -85,4 +152,18 @@ run(
 run("xcrun", ["stapler", "staple", dmg], "Stapling the disk image");
 run("spctl", ["--assess", "--type", "install", "-vv", dmg], "Gatekeeper assessment");
 
-console.log(`\nReady to publish: ${dmg}`);
+const version = JSON.parse(readFileSync("package.json", "utf8")).version;
+const update = writeManifest(version);
+
+console.log(`\nReady to publish v${version}. Upload all three:`);
+for (const file of [dmg, update.payload, update.manifest]) {
+  console.log(`  ${file}`);
+}
+console.log(
+  `\n  gh release create v${version} --target main \\\n` +
+    `    ${dmg} \\\n    ${update.payload} \\\n    ${update.manifest}`,
+);
+console.log(
+  "\nlatest.json is what installed copies read, so a release without it\n" +
+    "offers nothing and one without the payload offers a broken download.",
+);

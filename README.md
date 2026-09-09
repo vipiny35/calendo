@@ -44,6 +44,10 @@ pnpm dmg
 Then open the disk image in `src-tauri/target/release/bundle/dmg` and drag
 Calendo to Applications.
 
+Once installed, Calendo updates itself: Settings offers the new version and
+installs it on one click. The update is signed, and a copy that cannot verify
+the signature refuses it.
+
 ## Use
 
 Calendo stays in the menu bar after you quit every other window.

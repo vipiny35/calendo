@@ -1,6 +1,9 @@
 import type { AppSettings } from "../shared/settings";
 import type { UpcomingEvent } from "../shared/events";
 
+/** An empty version means the running build is current. */
+export type UpdateOffer = { version: string; notes: string };
+
 interface TauriGlobal {
   core: { invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> };
   event: {
@@ -28,7 +31,12 @@ export type DesktopApi = {
   getCalendarAccess: () => Promise<boolean>;
   joinMeeting: (url: string) => Promise<void>;
   openEvent: (id: string) => Promise<void>;
-  checkForUpdates: () => Promise<string>;
+  checkForUpdates: () => Promise<UpdateOffer>;
+  installUpdate: () => Promise<void>;
+  openRepository: () => Promise<void>;
+  onUpdateProgress: (
+    listener: (progress: { downloaded: number; total: number | null }) => void,
+  ) => () => void;
   hideCalendar: () => Promise<void>;
   hideEvents: () => Promise<void>;
   setEventsHeight: (height: number) => Promise<void>;
@@ -92,7 +100,14 @@ export const api: DesktopApi = {
   getCalendarAccess: () => invoke<boolean>("get_calendar_access"),
   joinMeeting: (url) => invoke<void>("join_meeting", { url }),
   openEvent: (id) => invoke<void>("open_event", { id }),
-  checkForUpdates: () => invoke<string>("check_for_updates"),
+  checkForUpdates: () => invoke<UpdateOffer>("check_for_updates"),
+  installUpdate: () => invoke<void>("install_update"),
+  openRepository: () => invoke<void>("open_repository"),
+  onUpdateProgress: (listener) =>
+    subscribe<{ downloaded: number; total: number | null }>(
+      "update-progress",
+      listener,
+    ),
   hideCalendar: () => invoke<void>("hide_calendar"),
   hideEvents: () => invoke<void>("hide_events"),
   setEventsHeight: (height) => invoke<void>("set_events_height", { height }),
