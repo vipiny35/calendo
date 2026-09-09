@@ -17,6 +17,7 @@ import { menuBarLabel, highlightedColumnRuns, type AppSettings } from "../shared
 import { eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/events";
 import { lucideIcon } from "./icons";
 import { eventGlyphPng, framedGlyphPng } from "./tray-frame";
+import { markPopoverMaterial } from "./popover-size";
 import { installTauriBridge, type DesktopApi } from "./host";
 import { ChevronLeft, ChevronRight, CircleDot, Settings, Video } from "lucide";
 
@@ -503,6 +504,7 @@ function startCalendar(api: DesktopApi): void {
   void api.getSettings().then((next) => {
     applySettings(next);
   });
+  void markPopoverMaterial(() => api.getPopoverMaterial());
   api.onSettingsChanged(applySettings);
   api.onClockTick(() => {
     const hour = new Date().getHours();

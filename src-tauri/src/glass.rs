@@ -5,18 +5,72 @@
 //! WKWebView. `NSVisualEffectView` carries the real material, and it follows
 //! the window's light or dark appearance.
 //!
-//! The material is Menu (NSVisualEffectMaterialMenu), which is what AppKit
-//! menus and the system's own menu bar panels — Wi-Fi, Sound, Control Centre —
-//! are drawn with. Popover is the material of a view-anchored popover and
-//! reads noticeably lighter and thinner beside them.
+//! On macOS 26 the system draws its own menu bar panels with Liquid Glass, so
+//! the popovers ask for `NSGlassEffectView` and fall back to
+//! `NSVisualEffectView` with the Menu material — what AppKit menus use — on
+//! anything older.
 //!
 //! The effect view fills the popover window.
 
-use objc2::runtime::{AnyObject, Bool};
+use objc2::runtime::{AnyClass, AnyObject, Bool};
 use objc2::{class, msg_send, sel};
+use objc2_foundation::NSRect;
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 const CORNER_RADIUS: f64 = 12.0;
+
+/// Set once the first popover has been dressed, so the pages can tint the
+/// material they actually got.
+static LIQUID_GLASS: AtomicBool = AtomicBool::new(false);
+
+pub fn is_liquid_glass() -> bool {
+    LIQUID_GLASS.load(Ordering::SeqCst)
+}
+
+/// AppKit's Liquid Glass view, which arrived in macOS 26. Absent before that,
+/// so it is looked up by name and the vibrancy view stands in.
+fn glass_effect_class() -> Option<&'static AnyClass> {
+    AnyClass::get(c"NSGlassEffectView")
+}
+
+/// Wraps the window's content in an `NSGlassEffectView`, which is how the
+/// system draws its own menu bar panels on macOS 26. The view hosts content
+/// rather than sitting behind it: the webview becomes its `contentView`, so
+/// the glass reads the content it carries and lenses what is behind the
+/// window.
+fn wrap_in_liquid_glass(ns_window: &AnyObject, radius: f64) -> bool {
+    let Some(class) = glass_effect_class() else {
+        return false;
+    };
+    unsafe {
+        let content: *mut AnyObject = msg_send![ns_window, contentView];
+        if content.is_null() {
+            return false;
+        }
+        // Hold the content view across the change of parent, or setting the
+        // window's new content view drops the last reference to it.
+        let previous: *mut AnyObject = msg_send![content, retain];
+        let frame: NSRect = msg_send![previous, frame];
+
+        let glass: *mut AnyObject = msg_send![class, alloc];
+        let glass: *mut AnyObject = msg_send![glass, initWithFrame: frame];
+        if glass.is_null() {
+            let _: () = msg_send![previous, release];
+            return false;
+        }
+        let _: () = msg_send![glass, setCornerRadius: radius];
+
+        let _: () = msg_send![ns_window, setContentView: glass];
+        // NSViewWidthSizable | NSViewHeightSizable, so the webview keeps
+        // filling the glass as the popover resizes to its content.
+        let _: () = msg_send![previous, setAutoresizingMask: 18usize];
+        let _: () = msg_send![glass, setContentView: previous];
+        let _: () = msg_send![previous, release];
+        true
+    }
+}
 /// Must run on the main thread. Setup already does.
 pub fn apply_calendar_glass(window: &tauri::WebviewWindow) {
     let Ok(pointer) = window.ns_window() else {
@@ -27,6 +81,14 @@ pub fn apply_calendar_glass(window: &tauri::WebviewWindow) {
     }
     let ns_window = unsafe { &*(pointer as *mut AnyObject) };
     clear_window(ns_window);
+
+    if wrap_in_liquid_glass(ns_window, CORNER_RADIUS) {
+        // Glass carries its own shading, so the pages drop their scrim. They
+        // ask for the material on load rather than being told, which would
+        // race the page.
+        LIQUID_GLASS.store(true, Ordering::SeqCst);
+        return;
+    }
 
     let _ = apply_vibrancy(
         window,

@@ -3,7 +3,7 @@ import { installTauriBridge } from "./host";
 import { lucideIcon } from "./icons";
 import { meetingBrand } from "../shared/meetings";
 import { meetingIcon } from "./brand-icons";
-import { popoverHeight } from "./popover-size";
+import { markPopoverMaterial, popoverHeight } from "./popover-size";
 import { MapPin } from "lucide";
 
 const api = installTauriBridge();
@@ -147,6 +147,7 @@ document.getElementById("settings")?.addEventListener("click", () => {
 });
 document.getElementById("quit")?.addEventListener("click", () => void api.quitApp());
 
+void markPopoverMaterial(() => api.getPopoverMaterial());
 api.onEventsShown(() => void load());
 api.onClockTick(() => void load());
 void load();

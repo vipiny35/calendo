@@ -49,6 +49,10 @@ html, body {
   padding-top: 6px;
   border-top: 1px solid var(--rule);
 }
+:root[data-material="glass"] .events-popover {
+  background: transparent;
+  box-shadow: none;
+}
 .section-label {
   margin: 10px 8px 3px;
   color: var(--muted);
