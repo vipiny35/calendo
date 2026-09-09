@@ -912,6 +912,25 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    /// A window missing from the capability cannot listen for events, and
+    /// nothing fails loudly: its own commands keep working while every
+    /// `listen` is refused, so the popover simply stops refreshing.
+    #[test]
+    fn every_window_is_granted_the_core_capability() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json"))
+                .expect("capability is valid JSON");
+        let windows = capability["windows"]
+            .as_array()
+            .expect("capability names its windows");
+        for label in [CALENDAR_LABEL, EVENTS_LABEL, SETTINGS_LABEL] {
+            assert!(
+                windows.iter().any(|window| window == label),
+                "window {label} is missing from capabilities/default.json"
+            );
+        }
+    }
+
     #[test]
     fn events_popover_grows_with_content_within_bounds() {
         assert_eq!(events_height(40.0, 982.0), EVENTS_MIN_HEIGHT);
