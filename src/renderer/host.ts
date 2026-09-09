@@ -33,6 +33,7 @@ export type DesktopApi = {
   getAppVersion: () => Promise<string>;
   onSettingsChanged: (listener: (settings: AppSettings) => void) => () => void;
   onCalendarShown: (listener: () => void) => () => void;
+  onCalendarHidden: (listener: () => void) => () => void;
   onClockTick: (listener: () => void) => () => void;
 };
 
@@ -88,6 +89,7 @@ export const api: DesktopApi = {
   getAppVersion: () => invoke<string>("app_version"),
   onSettingsChanged: (listener) => subscribe<AppSettings>("settings-changed", listener),
   onCalendarShown: (listener) => subscribe<void>("calendar-shown", listener),
+  onCalendarHidden: (listener) => subscribe<void>("calendar-hidden", listener),
   onClockTick: (listener) => subscribe<void>("clock-tick", listener),
 };
 

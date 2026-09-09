@@ -119,6 +119,7 @@ fn set_launch_at_login(app: &AppHandle, enabled: bool) {
 fn close_calendar(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
         let _ = window.hide();
+        let _ = app.emit("calendar-hidden", ());
     }
 }
 

@@ -138,6 +138,7 @@ function startCalendar(api: DesktopApi): void {
   let calendarEvents: UpcomingEvent[] = [];
   let eventError: string | null = null;
   let eventRequest = 0;
+  let calendarOpen = false;
 
   const paintEvent = (): void => {
     const enabled = settings?.showUpcomingEvent ?? false;
@@ -255,11 +256,14 @@ function startCalendar(api: DesktopApi): void {
       ? eventStatus(upcomingEvent, now.getTime()).label
       : "";
     const timerActive = Boolean(status);
-    const title = timerActive
+    const baseTitle = timerActive
       ? status
       : label.style === "none"
       ? `${label.text ?? ""}${status ? ` | ${status}` : ""}`
       : status ? `| ${status}` : "";
+    // A slim leading rule mirrors the native pressed state while our custom
+    // popover owns focus instead of an AppKit menu.
+    const title = calendarOpen ? `│ ${baseTitle}` : baseTitle;
     const trayStyle = timerActive ? "timer" : label.style;
     const signature = `${title}|${label.day ?? ""}|${trayStyle}`;
     if (signature === lastTrayLabel) return;
@@ -540,8 +544,14 @@ function startCalendar(api: DesktopApi): void {
     void refreshUpcoming();
   });
   api.onCalendarShown(() => {
+    calendarOpen = true;
+    refreshTray();
     render({ focusGrid: true });
     void refreshUpcoming();
+  });
+  api.onCalendarHidden(() => {
+    calendarOpen = false;
+    refreshTray();
   });
 }
 
