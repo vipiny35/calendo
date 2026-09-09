@@ -18,11 +18,6 @@ function dayLabel(date: Date): string {
 async function load(): Promise<void> {
   const now = Date.now();
   try {
-    if (!(await api.getCalendarAccess())) {
-      summary.textContent = "Calendar access needed";
-      list.innerHTML = '<p class="empty">Allow Calendar access in Settings.</p>';
-      return;
-    }
     const events = await api.getCalendarEvents(now, now + 3 * 86_400_000);
     const upcoming = events.filter((event) => event.endAt > now);
     const nextEvent = upcoming[0];
