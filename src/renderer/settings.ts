@@ -10,7 +10,6 @@ import {
   type Weekday,
   type WeekStartsOn,
 } from "../shared/settings";
-import { UNVERIFIED } from "../shared/updates";
 import { installTauriBridge, type DesktopApi } from "./host";
 import { lucideIcon } from "./icons";
 import { framedGlyphMask } from "./tray-frame";
@@ -112,7 +111,7 @@ function startSettings(api: DesktopApi): void {
   const version = requireElement<HTMLParagraphElement>("version");
   const checkUpdates = requireElement<HTMLButtonElement>("check-updates");
   const installUpdate = requireElement<HTMLButtonElement>("install-update");
-  const openReleases = requireElement<HTMLButtonElement>("open-releases");
+  const openRepository = requireElement<HTMLButtonElement>("open-repository");
   const updateStatus = requireElement<HTMLParagraphElement>("update-status");
 
   buildIconStyles(iconStyles);
@@ -258,7 +257,6 @@ function startSettings(api: DesktopApi): void {
   const checkForUpdates = async (): Promise<void> => {
     updateStatus.textContent = "Checking…";
     installUpdate.hidden = true;
-    openReleases.hidden = true;
     try {
       const offer = await api.checkForUpdates();
       if (!offer.version) {
@@ -282,16 +280,14 @@ function startSettings(api: DesktopApi): void {
     updateStatus.textContent = "Downloading…";
     void api.installUpdate().catch((error: unknown) => {
       const detail = typeof error === "string" ? error : "Update failed";
+      // An update that cannot be verified is a dead end here; the repository
+      // link below stands ready for the disk image.
       updateStatus.textContent = detail;
-      // Nothing this app can do fixes an update it cannot verify, so offer
-      // the one route that does: install the disk image by hand. The wording
-      // comes from install_failure in src-tauri/src/lib.rs.
-      openReleases.hidden = !detail.includes(UNVERIFIED);
       installUpdate.disabled = false;
       checkUpdates.disabled = false;
     });
   });
-  openReleases.addEventListener("click", () => void api.openReleasesPage());
+  openRepository.addEventListener("click", () => void api.openRepository());
   api.onUpdateProgress(({ downloaded, total }) => {
     updateStatus.textContent = total
       ? `Downloading… ${Math.min(100, Math.round((downloaded / total) * 100))}%`

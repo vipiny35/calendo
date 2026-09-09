@@ -965,9 +965,9 @@ async fn check_for_updates(app: AppHandle) -> Result<UpdateOffer, String> {
     }
 }
 
-/// The release page, for when an update cannot be applied and the only way
-/// forward is a hand-installed disk image.
-const RELEASES_URL: &str = "https://github.com/vipiny35/calendo/releases/latest";
+/// Shown on the About pane, and the way out when an update cannot be applied
+/// and the only route left is a hand-installed disk image.
+const REPOSITORY_URL: &str = "https://github.com/vipiny35/calendo";
 
 /// An update that will not verify is not a transient failure: this build's
 /// public key cannot attribute it to whoever signs releases, and no retry
@@ -980,8 +980,8 @@ fn install_failure(error: tauri_plugin_updater::Error) -> String {
 }
 
 #[tauri::command]
-fn open_releases_page() -> Result<(), String> {
-    events::open_meeting(RELEASES_URL)
+fn open_repository() -> Result<(), String> {
+    events::open_meeting(REPOSITORY_URL)
 }
 
 /// Downloads the update, replaces the app bundle, and relaunches. Progress
@@ -1066,7 +1066,7 @@ pub fn run() {
             app_version,
             check_for_updates,
             install_update,
-            open_releases_page,
+            open_repository,
             get_upcoming_event,
             get_calendar_events,
             request_calendar_access,
