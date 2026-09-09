@@ -26,8 +26,9 @@ const CALENDAR_LABEL: &str = "calendar";
 const EVENTS_LABEL: &str = "events";
 const EVENTS_WIDTH: f64 = 430.0;
 const EVENTS_MIN_HEIGHT: f64 = 92.0;
-/** Share of the screen the popover may fill before its list scrolls. */
-const EVENTS_SCREEN_SHARE: f64 = 0.9;
+/** Share of the screen the popover may fill before its list scrolls. Past
+    1.0 the surplus hangs below the display, so the list still scrolls there. */
+const EVENTS_SCREEN_SHARE: f64 = 1.8;
 /** Stands in when the monitor cannot be read. */
 const EVENTS_FALLBACK_SCREEN: f64 = 800.0;
 const SETTINGS_LABEL: &str = "settings";
@@ -915,8 +916,9 @@ mod tests {
     fn events_popover_grows_with_content_within_bounds() {
         assert_eq!(events_height(40.0, 982.0), EVENTS_MIN_HEIGHT);
         assert_eq!(events_height(300.0, 982.0), 300.0);
-        assert_eq!(events_height(2000.0, 982.0), 982.0 * EVENTS_SCREEN_SHARE);
-        assert_eq!(events_height(700.0, 600.0), 600.0 * EVENTS_SCREEN_SHARE);
+        assert_eq!(events_height(3000.0, 982.0), 982.0 * EVENTS_SCREEN_SHARE);
+        // A tall day is served whole rather than clipped to the screen.
+        assert_eq!(events_height(1400.0, 982.0), 1400.0);
         assert_eq!(events_height(f64::NAN, 982.0), EVENTS_MIN_HEIGHT);
         // A screen too short for the minimum still yields a usable window.
         assert_eq!(events_height(400.0, 50.0), EVENTS_MIN_HEIGHT);
