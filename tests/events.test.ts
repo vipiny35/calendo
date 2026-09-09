@@ -23,6 +23,10 @@ describe("event status", () => {
   it("keeps short durations readable", () => {
     expect(eventStatus(event, Date.UTC(2026, 8, 9, 10, 29, 59)).label).toBe("in 1m");
   });
+
+  it("uses hours for longer countdowns", () => {
+    expect(eventStatus(event, Date.UTC(2026, 8, 9, 8, 7)).label).toBe("in 2h 23m");
+  });
 });
 
 describe("event time range", () => {

@@ -14,6 +14,14 @@ function roundedMinutes(milliseconds: number): number {
   return Math.max(1, Math.ceil(milliseconds / 60_000));
 }
 
+function relativeTime(milliseconds: number): string {
+  const minutes = roundedMinutes(milliseconds);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+}
+
 export function eventStatus(
   event: Pick<UpcomingEvent, "startAt" | "endAt">,
   now = Date.now(),
@@ -26,12 +34,12 @@ export function eventStatus(
   }
   if (now >= event.startAt && now < event.endAt) {
     return {
-      label: `ends in ${roundedMinutes(event.endAt - now)}m`,
+      label: `ends in ${relativeTime(event.endAt - now)}`,
       timing: "ongoing",
     };
   }
   return {
-    label: `in ${roundedMinutes(event.startAt - now)}m`,
+    label: `in ${relativeTime(event.startAt - now)}`,
     timing: "upcoming",
   };
 }

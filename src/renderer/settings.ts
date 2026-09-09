@@ -103,6 +103,7 @@ function startSettings(api: DesktopApi): void {
   const autoUpdate = requireElement<HTMLInputElement>("auto-update");
   const showUpcoming = requireElement<HTMLInputElement>("show-upcoming");
   const calendarAccessStatus = requireElement<HTMLParagraphElement>("calendar-access-status");
+  const calendarAccess = requireElement<HTMLButtonElement>("calendar-access");
   const beepPreview = requireElement<HTMLButtonElement>("beep-preview");
   const theme = requireElement<HTMLSelectElement>("theme");
   const version = requireElement<HTMLParagraphElement>("version");
@@ -215,6 +216,24 @@ function startSettings(api: DesktopApi): void {
     void api.updateSettings(patch);
   });
 
+  const requestCalendarAccess = (): void => {
+    calendarAccessStatus.hidden = false;
+    calendarAccessStatus.textContent = "Requesting Calendar access…";
+    calendarAccess.disabled = true;
+    void api.requestCalendarAccess()
+      .then((granted) => {
+        calendarAccessStatus.textContent = granted
+          ? "Calendar access enabled."
+          : "Allow Calendar access in System Settings.";
+      })
+      .catch((error: unknown) => {
+        calendarAccessStatus.textContent = typeof error === "string"
+          ? error
+          : "Calendar access is unavailable.";
+      })
+      .finally(() => { calendarAccess.disabled = false; });
+  };
+  calendarAccess.addEventListener("click", requestCalendarAccess);
   showUpcoming.addEventListener("change", () => {
     if (!showUpcoming.checked) {
       calendarAccessStatus.hidden = true;
@@ -222,17 +241,7 @@ function startSettings(api: DesktopApi): void {
       return;
     }
 
-    calendarAccessStatus.hidden = false;
-    calendarAccessStatus.textContent = "Requesting Calendar access…";
-    void api.requestCalendarAccess()
-      .then((granted) => {
-        calendarAccessStatus.textContent = granted
-          ? "Calendar access enabled."
-          : "Allow Calendar access in System Settings.";
-      })
-      .catch(() => {
-        calendarAccessStatus.textContent = "Calendar access is unavailable.";
-      });
+    requestCalendarAccess();
   });
 
   iconStyles.addEventListener("click", (event) => {

@@ -16,7 +16,7 @@ import {
 import { menuBarLabel, highlightedColumnRuns, type AppSettings } from "../shared/settings";
 import { eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/events";
 import { lucideIcon } from "./icons";
-import { framedGlyphPng } from "./tray-frame";
+import { framedGlyphPng, timerGlyphPng } from "./tray-frame";
 import { installTauriBridge, type DesktopApi } from "./host";
 import { ChevronLeft, ChevronRight, CircleDot, Settings, Video } from "lucide";
 
@@ -117,6 +117,7 @@ function startCalendar(api: DesktopApi): void {
   const eventTitle = requireElement<HTMLElement>("event-title");
   const eventMeta = requireElement<HTMLElement>("event-meta");
   const joinMeeting = requireElement<HTMLButtonElement>("join-meeting");
+  const calendarAccess = requireElement<HTMLButtonElement>("calendar-access");
   const dayEvents = requireElement<HTMLElement>("day-events");
   const dayEventsTitle = requireElement<HTMLElement>("day-events-title");
   const dayEventsCount = requireElement<HTMLElement>("day-events-count");
@@ -141,6 +142,7 @@ function startCalendar(api: DesktopApi): void {
   const paintEvent = (): void => {
     const enabled = settings?.showUpcomingEvent ?? false;
     eventCard.hidden = !enabled;
+    calendarAccess.hidden = !enabled || !eventError;
     if (!enabled) return;
     if (!upcomingEvent) {
       eventStatusLabel.textContent = eventError ? "Calendar access needed" : "No upcoming events";
@@ -200,11 +202,12 @@ function startCalendar(api: DesktopApi): void {
     paintEvent();
     paintDayEvents();
     refreshTray();
+    render();
   };
 
   const paintDayEvents = (): void => {
     const enabled = settings?.showUpcomingEvent ?? false;
-    dayEvents.hidden = !enabled;
+    dayEvents.hidden = !enabled || Boolean(eventError);
     if (!enabled) return;
     const selectedDate = fromIso(focusIso);
     dayEventsTitle.textContent = new Intl.DateTimeFormat(undefined, {
@@ -251,19 +254,23 @@ function startCalendar(api: DesktopApi): void {
     const status = upcomingEvent && now.getTime() < upcomingEvent.endAt
       ? eventStatus(upcomingEvent, now.getTime()).label
       : "";
-    const title = label.style === "none"
+    const timerActive = Boolean(status);
+    const title = timerActive
+      ? status
+      : label.style === "none"
       ? `${label.text ?? ""}${status ? ` | ${status}` : ""}`
       : status ? `| ${status}` : "";
-    const signature = `${title}|${label.day ?? ""}|${label.style}`;
+    const trayStyle = timerActive ? "timer" : label.style;
+    const signature = `${title}|${label.day ?? ""}|${trayStyle}`;
     if (signature === lastTrayLabel) return;
     lastTrayLabel = signature;
     // The cutout style draws its date into the glyph instead of the title.
     const framed = label.style === "framed" ? label.text : null;
     void api.setTrayLabel(
       title || null,
-      label.day,
-      label.style,
-      framed === null ? null : framedGlyphPng(framed),
+      timerActive ? null : label.day,
+      trayStyle,
+      timerActive ? timerGlyphPng() : framed === null ? null : framedGlyphPng(framed),
     );
   };
 
@@ -435,6 +442,17 @@ function startCalendar(api: DesktopApi): void {
     const url = upcomingEvent?.joinUrl;
     if (!url) return;
     void api.joinMeeting(url).then(() => api.hideCalendar());
+  });
+  calendarAccess.addEventListener("click", async () => {
+    calendarAccess.disabled = true;
+    try {
+      await api.requestCalendarAccess();
+      await refreshUpcoming();
+    } catch {
+      eventMeta.textContent = "Could not request Calendar access. Try again.";
+    } finally {
+      calendarAccess.disabled = false;
+    }
   });
 
   document.addEventListener("keydown", (event) => {

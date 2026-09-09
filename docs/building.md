@@ -15,8 +15,12 @@ pnpm test
 pnpm app
 ```
 
-`pnpm app` rebuilds the frontend and runs `tauri dev`. The process is an
-accessory: look in the menu bar, not the Dock.
+`pnpm app` builds and opens a debug `Calendo.app` bundle. This includes the
+app identity and Calendar usage descriptions needed for macOS permission prompts.
+Look for Calendo in the menu bar.
+
+`pnpm dev` runs the unbundled executable with file watching for UI development.
+Use `pnpm app` when testing Calendar permissions.
 
 `pnpm dmg` produces a disk image under `src-tauri/target/release/bundle/dmg`.
 

@@ -16,20 +16,33 @@ pub struct UpcomingEvent {
 
 #[cfg(target_os = "macos")]
 #[allow(deprecated)]
-fn request_access(store: &objc2_event_kit::EKEventStore) {
+fn request_access(store: &objc2_event_kit::EKEventStore) -> Result<bool, String> {
     use block2::RcBlock;
     use objc2::runtime::Bool;
+    use objc2::runtime::NSObjectProtocol;
     use objc2_event_kit::EKEntityType;
 
-    let completion = RcBlock::new(|_: Bool, _: *mut objc2_foundation::NSError| {});
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let completion = RcBlock::new(move |granted: Bool, error: *mut objc2_foundation::NSError| {
+        let result = if let Some(error) = unsafe { error.as_ref() } {
+            Err(error.localizedDescription().to_string())
+        } else {
+            Ok(granted.as_bool())
+        };
+        let _ = sender.send(result);
+    });
     unsafe {
-        // Deprecated on macOS 14, but still the compatible request path for
-        // Calendo's macOS 13 minimum deployment target.
-        store.requestAccessToEntityType_completion(
-            EKEntityType::Event,
-            RcBlock::into_raw(completion),
-        );
+        if store.respondsToSelector(objc2::sel!(requestFullAccessToEventsWithCompletion:)) {
+            store.requestFullAccessToEventsWithCompletion(RcBlock::as_ptr(&completion));
+        } else {
+            // Compatibility with the macOS 13 minimum deployment target.
+            store.requestAccessToEntityType_completion(
+                EKEntityType::Event,
+                RcBlock::as_ptr(&completion),
+            );
+        }
     }
+    receiver.recv().map_err(|error| error.to_string())?
 }
 
 #[cfg(target_os = "macos")]
@@ -61,7 +74,7 @@ fn fetch_macos_range(start_ms: i64, end_ms: i64) -> Result<Vec<UpcomingEvent>, S
     autoreleasepool(|_| {
         let status = unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) };
         if status == EKAuthorizationStatus::NotDetermined {
-            return Ok(Vec::new());
+            return Err("Calendar access is not enabled".into());
         }
         if status != EKAuthorizationStatus::FullAccess {
             return Err("Calendar access is not enabled".into());
@@ -144,16 +157,25 @@ pub fn request_access_if_needed() -> Result<bool, String> {
     use objc2::AnyThread;
     use objc2_event_kit::{EKAuthorizationStatus, EKEntityType, EKEventStore};
 
-    Ok(autoreleasepool(|_| {
+    autoreleasepool(|_| {
         let status = unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) };
         if status == EKAuthorizationStatus::NotDetermined {
             let store = unsafe { EKEventStore::init(EKEventStore::alloc()) };
-            request_access(&store);
-            false
+            request_access(&store)
+        } else if status == EKAuthorizationStatus::FullAccess {
+            Ok(true)
         } else {
-            status == EKAuthorizationStatus::FullAccess
+            use objc2_app_kit::NSWorkspace;
+            use objc2_foundation::{NSString, NSURL};
+            let url = NSURL::URLWithString(&NSString::from_str(
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars",
+            )).ok_or("Could not open Calendar privacy settings")?;
+            if !NSWorkspace::sharedWorkspace().openURL(&url) {
+                return Err("Could not open Calendar privacy settings".into());
+            }
+            Ok(false)
         }
-    }))
+    })
 }
 
 pub fn fetch_upcoming() -> Result<Option<UpcomingEvent>, String> {

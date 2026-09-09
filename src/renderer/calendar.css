@@ -74,6 +74,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   width: 100%;
@@ -308,6 +312,8 @@ body {
 .day-events-list {
   display: grid;
   gap: 3px;
+  max-height: 100px;
+  overflow-y: auto;
 }
 
 .day-event {

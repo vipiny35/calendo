@@ -558,6 +558,7 @@ fn set_tray_label(
         let bytes: Option<&[u8]> = match style.as_str() {
             "none" => None,
             "framed" => image.as_deref(),
+            "timer" => image.as_deref(),
             "calendar" => Some(TRAY_CALENDAR),
             _ => icon_day
                 .filter(|day| (1..=31).contains(day))
@@ -616,8 +617,10 @@ fn get_calendar_events(start_at: i64, end_at: i64) -> Result<Vec<events::Upcomin
 }
 
 #[tauri::command]
-fn request_calendar_access() -> Result<bool, String> {
-    events::request_access_if_needed()
+async fn request_calendar_access() -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(events::request_access_if_needed)
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
