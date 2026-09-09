@@ -264,6 +264,12 @@ function startCalendar(api: DesktopApi): void {
       : baseTitle;
     const trayStyle = label.style;
     const signature = `${title}|${label.day ?? ""}|${trayStyle}`;
+    const eventTitle = status ? status.replaceAll(" ", "\u2009") : null;
+    const eventSignature = `${eventTitle ?? ""}|${Boolean(eventTitle)}`;
+    if (eventSignature !== lastEventTrayLabel) {
+      lastEventTrayLabel = eventSignature;
+      void api.setEventTrayLabel(eventTitle, eventTitle ? timerGlyphPng() : null, Boolean(eventTitle));
+    }
     if (signature === lastTrayLabel) return;
     lastTrayLabel = signature;
     // The cutout style draws its date into the glyph instead of the title.
@@ -274,12 +280,6 @@ function startCalendar(api: DesktopApi): void {
       trayStyle,
       framed === null ? null : framedGlyphPng(framed),
     );
-    const eventTitle = status ? status.replaceAll(" ", "\u2009") : null;
-    const eventSignature = `${eventTitle ?? ""}|${Boolean(eventTitle)}`;
-    if (eventSignature !== lastEventTrayLabel) {
-      lastEventTrayLabel = eventSignature;
-      void api.setEventTrayLabel(eventTitle, eventTitle ? timerGlyphPng() : null, Boolean(eventTitle));
-    }
   };
 
   const render = (opts?: { announceMonth?: boolean; focusGrid?: boolean }): void => {
