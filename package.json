@@ -6,15 +6,16 @@
   "description": "A menu bar calendar for macOS.",
   "packageManager": "pnpm@9.4.0",
   "scripts": {
-    "build": "pnpm typecheck && node scripts/copy-static.mjs",
     "app": "tauri build --debug --bundles app && open src-tauri/target/debug/bundle/macos/Calendo.app",
+    "build": "pnpm typecheck && node scripts/copy-static.mjs",
     "dev": "pnpm build && tauri dev",
     "dmg": "node scripts/release-dmg.mjs",
+    "dmg:background": "swift scripts/generate-dmg-background.swift && tiffutil -cathidpicheck icons/dmg/background.png icons/dmg/background@2x.png -out icons/dmg/background.tiff && rm icons/dmg/background.png icons/dmg/background@2x.png",
+    "icon": "swift scripts/generate-icon.swift",
     "test": "pnpm test:ui && pnpm test:rust",
-    "test:ui": "vitest run",
     "test:rust": "cargo test --locked --manifest-path src-tauri/Cargo.toml",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "icon": "swift scripts/generate-icon.swift"
+    "test:ui": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

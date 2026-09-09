@@ -33,7 +33,22 @@
       "minimumSystemVersion": "13.0",
       "infoPlist": "Info.plist",
       "entitlements": "Entitlements.plist",
-      "signingIdentity": "Developer ID Application: Vipin Yadav (H6892VVKC5)"
+      "signingIdentity": "Developer ID Application: Vipin Yadav (H6892VVKC5)",
+      "dmg": {
+        "background": "../icons/dmg/background.tiff",
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        }
+      }
     }
   }
 }
