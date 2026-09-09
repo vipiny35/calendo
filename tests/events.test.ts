@@ -29,8 +29,8 @@ describe("event status", () => {
   });
 
   it("counts down an event in progress", () => {
-    expect(eventStatus(event, Date.UTC(2026, 8, 9, 10, 40)).label).toBe("ends in 20m");
-    expect(eventStatus(event, Date.UTC(2026, 8, 9, 10, 56)).label).toBe("ends in 4m");
+    expect(eventStatus(event, Date.UTC(2026, 8, 9, 10, 40)).label).toBe("20m left");
+    expect(eventStatus(event, Date.UTC(2026, 8, 9, 10, 56)).label).toBe("4m left");
   });
 
   it("keeps short durations readable", () => {

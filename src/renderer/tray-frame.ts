@@ -74,16 +74,17 @@ export function framedGlyphMask(text: string): string {
 }
 
 /**
- * 2x of the 22pt menu bar, so the glyph lands on retina pixels 1:1 instead of
- * being stretched up from the 32px date badge.
+ * The tray scales every status image to 18pt tall, so a 36px box is exactly
+ * 2x and lands on retina pixels 1:1. Every measure below is in those pixels
+ * and reads at half its value in points.
  */
-const EVENT_BOX = 44;
+const EVENT_BOX = 36;
 /** Slim rounded mark that leads the countdown. */
-const PILL_WIDTH = 4;
-const PILL_HEIGHT = 30;
+const PILL_WIDTH = 3;
+const PILL_HEIGHT = 25;
 /** Transparent run between the mark and the countdown. */
-const PILL_GAP = 16;
-/** 13pt at 2x, a shade heavier than the regular system title. */
+const PILL_GAP = 13;
+/** 13pt once scaled, matching a native title, a shade heavier than regular. */
 const EVENT_FONT = '500 26px -apple-system, "SF Pro Text", system-ui, sans-serif';
 
 function measure(font: string, text: string): number {

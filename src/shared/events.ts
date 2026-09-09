@@ -57,7 +57,7 @@ export function eventStatus(
       return { label: "now", timing: "ongoing" };
     }
     return {
-      label: `ends in ${relativeTime(event.endAt - now)}`,
+      label: `${relativeTime(event.endAt - now)} left`,
       timing: "ongoing",
     };
   }
