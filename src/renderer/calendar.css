@@ -12,6 +12,8 @@
   --month-stroke: rgb(0 0 0 / 22%);
   --column-fill: rgb(0 0 0 / 6%);
   --rim: rgb(0 0 0 / 12%);
+  /* Tints the menu material rather than replacing it. */
+  --scrim: rgb(255 255 255 / 16%);
   --accent: AccentColor;
   --accent-text: #fff;
   --selection-border: #000;
@@ -36,6 +38,7 @@
     --month-stroke: rgb(255 255 255 / 28%);
     --column-fill: rgb(255 255 255 / 7%);
     --rim: rgb(255 255 255 / 12%);
+    --scrim: rgb(0 0 0 / 22%);
     --selection-border: #fff;
     color-scheme: dark;
   }
@@ -51,6 +54,7 @@
   --month-stroke: rgb(0 0 0 / 22%);
   --column-fill: rgb(0 0 0 / 6%);
   --rim: rgb(0 0 0 / 12%);
+  --scrim: rgb(255 255 255 / 16%);
   color-scheme: light;
 }
 
@@ -64,6 +68,7 @@
   --month-stroke: rgb(255 255 255 / 28%);
   --column-fill: rgb(255 255 255 / 7%);
   --rim: rgb(255 255 255 / 12%);
+  --scrim: rgb(0 0 0 / 22%);
   --selection-border: #fff;
   color-scheme: dark;
 }
@@ -106,9 +111,14 @@ body {
   flex-direction: column;
   height: 100%;
   border-radius: 12px;
-  background: var(--paper);
+  background: var(--scrim);
   box-shadow: inset 0 0 0 0.5px var(--rim);
   color: var(--ink);
+}
+/* Liquid Glass shades and edges itself; a scrim only muddies it. */
+:root[data-material="glass"] .popover {
+  background: transparent;
+  box-shadow: none;
 }
 
 

@@ -17,6 +17,8 @@ import { menuBarLabel, highlightedColumnRuns, type AppSettings } from "../shared
 import { eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/events";
 import { lucideIcon } from "./icons";
 import { eventGlyphPng, framedGlyphPng } from "./tray-frame";
+import { markPopoverMaterial } from "./popover-size";
+import { bandBox } from "./column-bands";
 import { installTauriBridge, type DesktopApi } from "./host";
 import { ChevronLeft, ChevronRight, CircleDot, Settings, Video } from "lucide";
 
@@ -82,23 +84,31 @@ function paintColumnHighlights(
   const lastRow = table.querySelector<HTMLElement>("tbody tr:last-child");
   if (!layer || headers.length < 7 || !firstBody || !lastRow) return;
   const wrapRect = wrap.getBoundingClientRect();
-  const top = firstBody.getBoundingClientRect().top - wrapRect.top;
-  const bottom = lastRow.getBoundingClientRect().bottom - wrapRect.top;
-  const inset = 2;
+  // The band covers the weekday letters as well as the dates below them.
+  const rows = {
+    top: headers[0]!.getBoundingClientRect().top,
+    bottom: lastRow.getBoundingClientRect().bottom,
+  };
   layer.replaceChildren(
     ...highlightedColumnRuns(settings.weekStartsOn, settings.highlightWeekdays).flatMap(
       (run) => {
         const start = headers[run.start];
         const end = headers[run.start + run.count - 1];
         if (!start || !end) return [];
-        const startRect = start.getBoundingClientRect();
-        const endRect = end.getBoundingClientRect();
+        const box = bandBox(
+          {
+            left: start.getBoundingClientRect().left,
+            right: end.getBoundingClientRect().right,
+          },
+          rows,
+          { left: wrapRect.left, top: wrapRect.top },
+        );
         const band = document.createElement("div");
         band.className = "column-highlight";
-        band.style.left = `${startRect.left - wrapRect.left + inset}px`;
-        band.style.width = `${Math.max(0, endRect.right - startRect.left - inset * 2)}px`;
-        band.style.top = `${top}px`;
-        band.style.height = `${Math.max(0, bottom - top)}px`;
+        band.style.left = `${box.left}px`;
+        band.style.width = `${box.width}px`;
+        band.style.top = `${box.top}px`;
+        band.style.height = `${box.height}px`;
         return [band];
       },
     ),
@@ -139,7 +149,6 @@ function startCalendar(api: DesktopApi): void {
   let calendarEvents: UpcomingEvent[] = [];
   let eventError: string | null = null;
   let eventRequest = 0;
-  let calendarOpen = false;
 
   const paintEvent = (): void => {
     eventCard.hidden = true;
@@ -231,12 +240,9 @@ function startCalendar(api: DesktopApi): void {
     const status = upcomingEvent && now.getTime() < upcomingEvent.endAt
       ? eventStatus(upcomingEvent, now.getTime()).label
       : "";
-    const baseTitle = label.style === "none" ? label.text ?? "" : "";
-    // A slim leading rule mirrors the native pressed state while our custom
-    // popover owns focus instead of an AppKit menu.
-    const title = calendarOpen && baseTitle
-      ? `┃  ${baseTitle.replaceAll(" ", "\u2009")}`
-      : baseTitle;
+    // The status item carries the real pressed highlight now, so the title
+    // stays as it reads when the popover is closed.
+    const title = label.style === "none" ? label.text ?? "" : "";
     const trayStyle = label.style;
     const signature = `${title}|${label.day ?? ""}|${trayStyle}`;
     // A hair space keeps "2h 21m" from reading as one long number without
@@ -503,6 +509,7 @@ function startCalendar(api: DesktopApi): void {
   void api.getSettings().then((next) => {
     applySettings(next);
   });
+  void markPopoverMaterial(() => api.getPopoverMaterial());
   api.onSettingsChanged(applySettings);
   api.onClockTick(() => {
     const hour = new Date().getHours();
@@ -515,14 +522,9 @@ function startCalendar(api: DesktopApi): void {
     void refreshUpcoming();
   });
   api.onCalendarShown(() => {
-    calendarOpen = true;
     refreshTray();
     render({ focusGrid: true });
     void refreshUpcoming();
-  });
-  api.onCalendarHidden(() => {
-    calendarOpen = false;
-    refreshTray();
   });
 }
 

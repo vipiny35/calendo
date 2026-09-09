@@ -25,3 +25,19 @@ export function popoverHeight(list: HTMLElement, root: ParentNode = document): n
   // A pixel of slack absorbs the rounding of fractional line heights.
   return Math.ceil(content + footer + padding) + 1;
 }
+
+/**
+ * Records which native material the window ended up with, so the page can
+ * tint vibrancy but leave Liquid Glass to its own shading.
+ */
+export async function markPopoverMaterial(
+  read: () => Promise<string>,
+): Promise<void> {
+  const root = document.documentElement;
+  if (!root) return;
+  try {
+    root.dataset.material = await read();
+  } catch {
+    root.dataset.material = "vibrancy";
+  }
+}

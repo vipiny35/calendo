@@ -10,9 +10,9 @@ mod settings;
 
 use settings::{AppSettings, SettingsStore};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
@@ -25,10 +25,12 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 const CALENDAR_LABEL: &str = "calendar";
 const EVENTS_LABEL: &str = "events";
 const EVENTS_WIDTH: f64 = 430.0;
-const EVENTS_MIN_HEIGHT: f64 = 92.0;
-/** Share of the screen the popover may fill before its list scrolls. Past
-    1.0 the surplus hangs below the display, so the list still scrolls there. */
-const EVENTS_SCREEN_SHARE: f64 = 1.8;
+/// Only a floor against a degenerate window: the popover takes the height its
+/// content asks for, with no minimum of its own.
+const EVENTS_FLOOR: f64 = 40.0;
+/// Share of the screen the popover may fill before its list scrolls. Keeping
+/// this under 1.0 leaves the whole popover on the display.
+const EVENTS_SCREEN_SHARE: f64 = 0.9;
 /** Stands in when the monitor cannot be read. */
 const EVENTS_FALLBACK_SCREEN: f64 = 800.0;
 const SETTINGS_LABEL: &str = "settings";
@@ -82,7 +84,23 @@ struct AppState {
     settings: Mutex<SettingsStore>,
     ignore_calendar_blur: AtomicBool,
     calendar_pinned: AtomicBool,
+    /// Height of the display the events popover was last placed on, since a
+    /// hidden window reports whichever screen it happens to rest on.
+    events_screen_height: Mutex<f64>,
+    /// When blur last closed the calendar. A click on the tray icon arrives
+    /// just after the blur it caused, and without this the toggle would read
+    /// the popover as closed and open it straight back up.
+    calendar_closed_at: Mutex<Option<Instant>>,
+    events_closed_at: Mutex<Option<Instant>>,
+    /// Counts each fade, so the hide that follows one belongs to it. Reopening
+    /// mid-fade bumps the count and the pending hide stands down.
+    calendar_fade: AtomicU64,
+    events_fade: AtomicU64,
 }
+
+/// How long after a blur-driven close a tray click still counts as the click
+/// that closed it.
+const REOPEN_GUARD: Duration = Duration::from_millis(300);
 
 fn calendar_width(show_week_numbers: bool) -> f64 {
     if show_week_numbers {
@@ -123,25 +141,87 @@ fn set_launch_at_login(app: &AppHandle, enabled: bool) {
     };
 }
 
+fn fade_counter<'a>(state: &'a AppState, label: &str) -> &'a AtomicU64 {
+    if label == CALENDAR_LABEL {
+        &state.calendar_fade
+    } else {
+        &state.events_fade
+    }
+}
+
+fn closed_at<'a>(state: &'a AppState, label: &str) -> &'a Mutex<Option<Instant>> {
+    if label == CALENDAR_LABEL {
+        &state.calendar_closed_at
+    } else {
+        &state.events_closed_at
+    }
+}
+
+/// Dissolves the popover the way a menu extra does, then hides it. A reopen
+/// during the fade cancels the hide and restores full opacity.
+fn fade_out_and_hide(app: &AppHandle, label: &'static str) {
+    let Some(window) = app.get_webview_window(label) else {
+        return;
+    };
+    if !window.is_visible().unwrap_or(false) {
+        return;
+    }
+    let generation = fade_counter(&app.state::<AppState>(), label).fetch_add(1, Ordering::SeqCst) + 1;
+    glass::fade_out(&window);
+
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(glass::FADE);
+        let app = handle.clone();
+        let _ = handle.run_on_main_thread(move || {
+            if fade_counter(&app.state::<AppState>(), label).load(Ordering::SeqCst) != generation {
+                return;
+            }
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.hide();
+                glass::clear_fade(&window);
+            }
+        });
+    });
+}
+
+/// Cancels a fade in flight and brings the window back to full opacity, so an
+/// immediate reopen shows a solid popover rather than a half-faded one.
+fn cancel_fade(app: &AppHandle, label: &'static str) {
+    fade_counter(&app.state::<AppState>(), label).fetch_add(1, Ordering::SeqCst);
+    if let Some(window) = app.get_webview_window(label) {
+        glass::clear_fade(&window);
+    }
+}
+
 fn close_calendar(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
-        let _ = window.hide();
-        let _ = app.emit("calendar-hidden", ());
+    fade_out_and_hide(app, CALENDAR_LABEL);
+    let _ = app.emit("calendar-hidden", ());
+    if let Ok(mut closed) = closed_at(&app.state::<AppState>(), CALENDAR_LABEL).lock() {
+        *closed = Some(Instant::now());
     }
     set_status_item_highlight(app, TRAY_ID, false);
 }
 
 fn close_events(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(EVENTS_LABEL) {
-        let _ = window.hide();
+    fade_out_and_hide(app, EVENTS_LABEL);
+    if let Ok(mut closed) = closed_at(&app.state::<AppState>(), EVENTS_LABEL).lock() {
+        *closed = Some(Instant::now());
     }
     set_status_item_highlight(app, EVENT_TRAY_ID, false);
 }
 
+/// AppKit answers only on the main thread, and blur handling reaches this from
+/// a timer thread, where a marker cannot be had and the call would be dropped.
 #[cfg(target_os = "macos")]
 fn set_status_item_highlight(app: &AppHandle, id: &str, highlighted: bool) {
     use objc2_foundation::MainThreadMarker;
-    if let Some(tray) = app.tray_by_id(id) {
+    let id = id.to_string();
+    let handle = app.clone();
+    let _ = app.clone().run_on_main_thread(move || {
+        let Some(tray) = handle.tray_by_id(&id) else {
+            return;
+        };
         let _ = tray.with_inner_tray_icon(move |inner| {
             let Some(item) = inner.ns_status_item() else { return; };
             let Some(mtm) = MainThreadMarker::new() else { return; };
@@ -149,7 +229,7 @@ fn set_status_item_highlight(app: &AppHandle, id: &str, highlighted: bool) {
                 button.setHighlighted(highlighted);
             }
         });
-    }
+    });
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -247,19 +327,14 @@ fn popover_origin(
     (x, y, placement)
 }
 
-fn position_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
-    let Some(window) = app.get_webview_window(CALENDAR_LABEL) else {
-        return;
-    };
-    let (width, height) = app
-        .state::<AppState>()
-        .settings
-        .lock()
-        .map(|store| {
-            let settings = store.value();
-            calendar_window_size(settings.show_week_numbers, settings.show_upcoming_event)
-        })
-        .unwrap_or_else(|_| calendar_window_size(false, false));
+/// Where a popover of this size belongs under the tray icon, in logical
+/// points, along with the bounds of the display it landed on.
+fn place_under_tray(
+    window: &WebviewWindow,
+    tray_rect: tauri::Rect,
+    width: f64,
+    height: f64,
+) -> (f64, f64, ScreenBounds) {
     let fallback_scale = window.scale_factor().unwrap_or(1.0);
     // Tray events already carry physical pixels, converted with the status
     // item's own scale. The hidden window often still sits on the primary
@@ -311,15 +386,48 @@ fn position_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
             height: height.max(tray_h),
         });
     let (x, y, _placement) = popover_origin(tray_x, tray_y, tray_w, tray_h, width, height, screen);
+    (x, y, screen)
+}
 
+fn position_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
+    let Some(window) = app.get_webview_window(CALENDAR_LABEL) else {
+        return;
+    };
+    let (width, height) = app
+        .state::<AppState>()
+        .settings
+        .lock()
+        .map(|store| {
+            let settings = store.value();
+            calendar_window_size(settings.show_week_numbers, settings.show_upcoming_event)
+        })
+        .unwrap_or_else(|_| calendar_window_size(false, false));
+    let (x, y, _screen) = place_under_tray(&window, tray_rect, width, height);
     let _ = window.set_size(Size::Logical(LogicalSize::new(width, height)));
     // Logical points, not physical: set_position converts physical coords with
     // the *window's* current scale, which is still the other display's.
     let _ = window.set_position(Position::Logical(LogicalPosition::new(x, y)));
 }
 
+fn position_events(app: &AppHandle, tray_rect: tauri::Rect) {
+    let Some(window) = app.get_webview_window(EVENTS_LABEL) else {
+        return;
+    };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let height = window
+        .inner_size()
+        .map(|size| size.to_logical::<f64>(scale).height)
+        .unwrap_or(EVENTS_FLOOR);
+    let (x, y, screen) = place_under_tray(&window, tray_rect, EVENTS_WIDTH, height);
+    if let Ok(mut recorded) = app.state::<AppState>().events_screen_height.lock() {
+        *recorded = screen.height;
+    }
+    let _ = window.set_position(Position::Logical(LogicalPosition::new(x, y)));
+}
+
 fn show_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
     close_events(app);
+    cancel_fade(app, CALENDAR_LABEL);
     position_calendar(app, tray_rect);
     if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
         let _ = window.show();
@@ -336,10 +444,18 @@ fn toggle_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
         .get_webview_window(CALENDAR_LABEL)
         .and_then(|window| window.is_visible().ok())
         .unwrap_or(false);
+    let just_closed = app
+        .state::<AppState>()
+        .calendar_closed_at
+        .lock()
+        .map(|closed| closed.is_some_and(|at| at.elapsed() < REOPEN_GUARD))
+        .unwrap_or(false);
+    // This click is the one that closed it: the blur it caused got here
+    // first, and the popover may still be fading out.
+    if just_closed {
+        return;
+    }
     if visible {
-        app.state::<AppState>()
-            .ignore_calendar_blur
-            .store(true, Ordering::SeqCst);
         close_calendar(app);
         return;
     }
@@ -348,14 +464,9 @@ fn toggle_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
 
 fn show_events(app: &AppHandle, tray_rect: tauri::Rect) {
     close_calendar(app);
+    cancel_fade(app, EVENTS_LABEL);
+    position_events(app, tray_rect);
     let Some(window) = app.get_webview_window(EVENTS_LABEL) else { return; };
-    let scale = window.scale_factor().unwrap_or(1.0);
-    let pos: LogicalPosition<f64> = tray_rect.position.to_logical(scale);
-    let size: tauri::LogicalSize<f64> = tray_rect.size.to_logical(scale);
-    let _ = window.set_position(Position::Logical(LogicalPosition::new(
-        pos.x + size.width / 2.0 - EVENTS_WIDTH / 2.0,
-        pos.y + size.height,
-    )));
     let _ = window.show();
     let _ = window.set_focus();
     set_status_item_highlight(app, EVENT_TRAY_ID, true);
@@ -367,7 +478,15 @@ fn toggle_events(app: &AppHandle, tray_rect: tauri::Rect) {
         .get_webview_window(EVENTS_LABEL)
         .and_then(|window| window.is_visible().ok())
         .unwrap_or(false);
-    if visible { close_events(app); } else { show_events(app, tray_rect); }
+    let just_closed = closed_at(&app.state::<AppState>(), EVENTS_LABEL)
+        .lock()
+        .map(|closed| closed.is_some_and(|at| at.elapsed() < REOPEN_GUARD))
+        .unwrap_or(false);
+    if visible {
+        close_events(app);
+    } else if !just_closed {
+        show_events(app, tray_rect);
+    }
 }
 
 fn present_settings(app: &AppHandle) {
@@ -482,32 +601,18 @@ fn build_calendar_window(app: &AppHandle) -> tauri::Result<()> {
 
     let handle = app.clone();
     window.on_window_event(move |event| match event {
+        // Closing on the spot, rather than after a delay, keeps the popover
+        // from being left visible but inactive — long enough for the glass to
+        // paint its subdued state before the window goes away.
         WindowEvent::Focused(false) => {
-            let app = handle.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(180));
-                if app
-                    .state::<AppState>()
-                    .calendar_pinned
-                    .load(Ordering::SeqCst)
-                {
-                    return;
-                }
-                if app
-                    .state::<AppState>()
-                    .ignore_calendar_blur
-                    .swap(false, Ordering::SeqCst)
-                {
-                    return;
-                }
-                if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
-                    let focused = window.is_focused().unwrap_or(false);
-                    let visible = window.is_visible().unwrap_or(false);
-                    if visible && !focused {
-                        let _ = window.hide();
-                    }
-                }
-            });
+            let state = handle.state::<AppState>();
+            if state.calendar_pinned.load(Ordering::SeqCst) {
+                return;
+            }
+            if state.ignore_calendar_blur.swap(false, Ordering::SeqCst) {
+                return;
+            }
+            close_calendar(&handle);
         }
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
@@ -521,7 +626,7 @@ fn build_calendar_window(app: &AppHandle) -> tauri::Result<()> {
 fn build_events_window(app: &AppHandle) -> tauri::Result<()> {
     let window = WebviewWindowBuilder::new(app, EVENTS_LABEL, WebviewUrl::App("events.html".into()))
         .title("Upcoming Events")
-        .inner_size(EVENTS_WIDTH, EVENTS_MIN_HEIGHT)
+        .inner_size(EVENTS_WIDTH, EVENTS_FLOOR)
         .decorations(false)
         .transparent(true)
         .shadow(true)
@@ -697,27 +802,13 @@ fn hide_events(app: AppHandle) {
     close_events(&app);
 }
 
-/// The popover grows with its content instead of scrolling a fixed frame,
-/// up to most of the screen it sits on.
+/// The popover takes its content's height, capped by the screen it sits on.
 fn events_height(content: f64, screen: f64) -> f64 {
-    if !content.is_finite() {
-        return EVENTS_MIN_HEIGHT;
+    if !content.is_finite() || content <= 0.0 {
+        return EVENTS_FLOOR;
     }
-    let ceiling = (screen * EVENTS_SCREEN_SHARE).max(EVENTS_MIN_HEIGHT);
-    content.clamp(EVENTS_MIN_HEIGHT, ceiling)
-}
-
-fn screen_height(window: &WebviewWindow) -> f64 {
-    window
-        .current_monitor()
-        .ok()
-        .flatten()
-        .map(|monitor| {
-            let scale = monitor.scale_factor();
-            monitor.size().to_logical::<f64>(scale).height
-        })
-        .filter(|height| height.is_finite() && *height > 0.0)
-        .unwrap_or(EVENTS_FALLBACK_SCREEN)
+    let ceiling = (screen * EVENTS_SCREEN_SHARE).max(EVENTS_FLOOR);
+    content.min(ceiling).max(EVENTS_FLOOR)
 }
 
 #[tauri::command]
@@ -725,11 +816,29 @@ fn set_events_height(app: AppHandle, height: f64) {
     let Some(window) = app.get_webview_window(EVENTS_LABEL) else {
         return;
     };
-    let ceiling = screen_height(&window);
+    // The screen recorded when the popover was placed, not the one the hidden
+    // window happens to sit on.
+    let ceiling = app
+        .state::<AppState>()
+        .events_screen_height
+        .lock()
+        .map(|height| *height)
+        .unwrap_or(EVENTS_FALLBACK_SCREEN);
     let _ = window.set_size(Size::Logical(LogicalSize::new(
         EVENTS_WIDTH,
         events_height(height, ceiling),
     )));
+}
+
+/// "glass" once the popovers are drawn on Liquid Glass, "vibrancy" when the
+/// system is too old for it and the Menu material stands in.
+#[tauri::command]
+fn popover_material() -> &'static str {
+    if glass::is_liquid_glass() {
+        "glass"
+    } else {
+        "vibrancy"
+    }
 }
 
 #[tauri::command]
@@ -873,6 +982,11 @@ pub fn run() {
                 settings: Mutex::new(store),
                 ignore_calendar_blur: AtomicBool::new(false),
                 calendar_pinned: AtomicBool::new(false),
+                events_screen_height: Mutex::new(EVENTS_FALLBACK_SCREEN),
+                calendar_closed_at: Mutex::new(None),
+                events_closed_at: Mutex::new(None),
+                calendar_fade: AtomicU64::new(0),
+                events_fade: AtomicU64::new(0),
             });
             set_launch_at_login(app.handle(), initial.launch_at_login);
             build_calendar_window(app.handle())?;
@@ -892,6 +1006,7 @@ pub fn run() {
             hide_calendar,
             hide_events,
             set_events_height,
+            popover_material,
             set_calendar_pinned,
             open_settings,
             quit_app,
@@ -932,15 +1047,17 @@ mod tests {
     }
 
     #[test]
-    fn events_popover_grows_with_content_within_bounds() {
-        assert_eq!(events_height(40.0, 982.0), EVENTS_MIN_HEIGHT);
+    fn events_popover_takes_its_content_height_under_a_ceiling() {
+        // No minimum of its own: a short list gets a short window.
+        assert_eq!(events_height(120.0, 982.0), 120.0);
         assert_eq!(events_height(300.0, 982.0), 300.0);
+        // The ceiling keeps the whole popover on the display.
         assert_eq!(events_height(3000.0, 982.0), 982.0 * EVENTS_SCREEN_SHARE);
-        // A tall day is served whole rather than clipped to the screen.
-        assert_eq!(events_height(1400.0, 982.0), 1400.0);
-        assert_eq!(events_height(f64::NAN, 982.0), EVENTS_MIN_HEIGHT);
-        // A screen too short for the minimum still yields a usable window.
-        assert_eq!(events_height(400.0, 50.0), EVENTS_MIN_HEIGHT);
+        assert_eq!(events_height(700.0, 600.0), 600.0 * EVENTS_SCREEN_SHARE);
+        assert_eq!(events_height(f64::NAN, 982.0), EVENTS_FLOOR);
+        assert_eq!(events_height(0.0, 982.0), EVENTS_FLOOR);
+        // A screen too short for the floor still yields a usable window.
+        assert_eq!(events_height(400.0, 20.0), EVENTS_FLOOR);
     }
 
     // Retina laptop below a 1× external, matching a typical arrangement:
