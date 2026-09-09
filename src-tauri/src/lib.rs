@@ -352,6 +352,7 @@ fn show_events(app: &AppHandle, tray_rect: tauri::Rect) {
     let _ = window.show();
     let _ = window.set_focus();
     set_status_item_highlight(app, EVENT_TRAY_ID, true);
+    let _ = window.emit("events-shown", ());
 }
 
 fn toggle_events(app: &AppHandle, tray_rect: tauri::Rect) {

@@ -15,10 +15,14 @@ function dayLabel(date: Date): string {
   return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(date);
 }
 
+let loadRevision = 0;
+
 async function load(): Promise<void> {
+  const revision = ++loadRevision;
   const now = Date.now();
   try {
     const events = await api.getCalendarEvents(now, now + 2 * 86_400_000);
+    if (revision !== loadRevision) return;
     const upcoming = events.filter((event) => event.endAt > now);
     const nextEvent = upcoming[0];
     summary.textContent = nextEvent ? eventStatus(nextEvent, now).label.replace(/(\d+)([hm])/g, "$1 $2") : "No upcoming events";
@@ -34,9 +38,15 @@ async function load(): Promise<void> {
       item.append(dot, time, title); nodes.push(item); return nodes;
     }).flat());
   } catch (error) {
+    if (revision !== loadRevision) return;
     const detail = error instanceof Error ? error.message : String(error);
     summary.textContent = detail.toLowerCase().includes("access") ? "Calendar access needed" : "Could not load events";
-    list.innerHTML = `<p class="empty">${detail || "Try again shortly."}</p>`;
+    const message = document.createElement("p");
+    message.className = "empty";
+    message.textContent = detail || "Try again shortly.";
+    list.replaceChildren(message);
   }
 }
+api.onEventsShown(() => void load());
+api.onClockTick(() => void load());
 void load();

@@ -171,11 +171,11 @@ function startCalendar(api: DesktopApi): void {
       upcomingEvent = nextEvent;
       calendarEvents = monthEvents;
       eventError = null;
-    } catch {
+    } catch (error) {
       if (request !== eventRequest) return;
       upcomingEvent = null;
       calendarEvents = [];
-      eventError = "Calendar access is not enabled";
+      eventError = error instanceof Error ? error.message : String(error);
     }
     paintEvent();
     paintDayEvents();

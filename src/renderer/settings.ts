@@ -14,6 +14,7 @@ import { installTauriBridge, type DesktopApi } from "./host";
 import { lucideIcon } from "./icons";
 import { framedGlyphMask } from "./tray-frame";
 import { Check, Volume2 } from "lucide";
+import { bindCalendarAccess } from "./calendar-access";
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -217,33 +218,15 @@ function startSettings(api: DesktopApi): void {
     void api.updateSettings(patch);
   });
 
-  const requestCalendarAccess = (): void => {
-    calendarAccessStatus.hidden = false;
-    calendarAccessStatus.textContent = "Requesting Calendar access…";
-    calendarAccess.disabled = true;
-    void api.requestCalendarAccess()
-      .then((granted) => {
-        calendarAccessRow.hidden = granted;
-        calendarAccessStatus.textContent = granted
-          ? "Calendar access enabled."
-          : "Allow Calendar access in System Settings.";
-      })
-      .catch((error: unknown) => {
-        calendarAccessStatus.textContent = typeof error === "string"
-          ? error
-          : "Calendar access is unavailable.";
-      })
-      .finally(() => { calendarAccess.disabled = false; });
-  };
-  calendarAccess.addEventListener("click", requestCalendarAccess);
-  showUpcoming.addEventListener("change", () => {
-    if (!showUpcoming.checked) {
-      calendarAccessStatus.hidden = true;
-      calendarAccessStatus.textContent = "";
-      return;
-    }
-
-    requestCalendarAccess();
+  const refreshCalendarAccess = bindCalendarAccess(api, {
+    status: calendarAccessStatus,
+    button: calendarAccess,
+    row: calendarAccessRow,
+    toggle: showUpcoming,
+  });
+  window.addEventListener("focus", () => void refreshCalendarAccess());
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) void refreshCalendarAccess();
   });
 
   iconStyles.addEventListener("click", (event) => {
@@ -287,9 +270,7 @@ function startSettings(api: DesktopApi): void {
   void api.getSettings().then((settings) => {
     paint(settings);
     if (settings.autoUpdate) void checkForUpdates();
-    void api.getCalendarAccess().then((granted) => {
-      calendarAccessRow.hidden = granted;
-    });
+    void refreshCalendarAccess();
   });
   void api.getAppVersion().then((value) => {
     version.textContent = value;
