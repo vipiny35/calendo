@@ -31,8 +31,6 @@ const AUTOSTART_ARG: &str = "--autostart";
 const CALENDAR_WIDTH: f64 = 288.0;
 const CALENDAR_WIDTH_WEEKS: f64 = 312.0;
 const CALENDAR_HEIGHT: f64 = 348.0;
-const EVENT_CARD_HEIGHT: f64 = 96.0;
-const EVENT_LIST_HEIGHT: f64 = 132.0;
 const SETTINGS_WIDTH: f64 = 560.0;
 const SETTINGS_HEIGHT: f64 = 560.0;
 
@@ -176,16 +174,8 @@ enum PopoverPlacement {
     Above,
 }
 
-fn calendar_window_size(show_week_numbers: bool, show_upcoming_event: bool) -> (f64, f64) {
-    (
-        calendar_width(show_week_numbers),
-        CALENDAR_HEIGHT
-            + if show_upcoming_event {
-                EVENT_CARD_HEIGHT + EVENT_LIST_HEIGHT
-            } else {
-                0.0
-            },
-    )
+fn calendar_window_size(show_week_numbers: bool, _show_upcoming_event: bool) -> (f64, f64) {
+    (calendar_width(show_week_numbers), CALENDAR_HEIGHT)
 }
 
 fn window_theme(theme: &str) -> Option<Theme> {

@@ -18,7 +18,7 @@ function dayLabel(date: Date): string {
 async function load(): Promise<void> {
   const now = Date.now();
   try {
-    const events = await api.getCalendarEvents(now, now + 3 * 86_400_000);
+    const events = await api.getCalendarEvents(now, now + 2 * 86_400_000);
     const upcoming = events.filter((event) => event.endAt > now);
     const nextEvent = upcoming[0];
     summary.textContent = nextEvent ? eventStatus(nextEvent, now).label.replace(/(\d+)([hm])/g, "$1 $2") : "No upcoming events";
