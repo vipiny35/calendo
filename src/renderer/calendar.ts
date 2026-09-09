@@ -16,7 +16,7 @@ import {
 import { menuBarLabel, highlightedColumnRuns, type AppSettings } from "../shared/settings";
 import { eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/events";
 import { lucideIcon } from "./icons";
-import { framedGlyphPng, timerGlyphPng } from "./tray-frame";
+import { eventGlyphPng, framedGlyphPng } from "./tray-frame";
 import { installTauriBridge, type DesktopApi } from "./host";
 import { ChevronLeft, ChevronRight, CircleDot, Settings, Video } from "lucide";
 
@@ -243,7 +243,8 @@ function startCalendar(api: DesktopApi): void {
     const eventSignature = `${eventTitle ?? ""}|${Boolean(eventTitle)}`;
     if (eventSignature !== lastEventTrayLabel) {
       lastEventTrayLabel = eventSignature;
-      void api.setEventTrayLabel(eventTitle, eventTitle ? timerGlyphPng() : null, Boolean(eventTitle));
+      // The countdown rides in the glyph, so the status item keeps no title.
+      void api.setEventTrayLabel(null, eventTitle ? eventGlyphPng(eventTitle) : null, Boolean(eventTitle));
     }
     if (signature === lastTrayLabel) return;
     lastTrayLabel = signature;

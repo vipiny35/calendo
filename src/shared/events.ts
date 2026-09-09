@@ -1,3 +1,11 @@
+/** How the user answered the invitation; "confirmed" means no invitation. */
+export type EventResponse =
+  | "confirmed"
+  | "accepted"
+  | "tentative"
+  | "declined"
+  | "pending";
+
 export type UpcomingEvent = {
   id: string;
   title: string;
@@ -6,7 +14,16 @@ export type UpcomingEvent = {
   calendar: string | null;
   location: string | null;
   joinUrl: string | null;
+  response: EventResponse;
 };
+
+/** Local midnight that ends the "today and tomorrow" window. */
+export function endOfTomorrow(now = new Date()): number {
+  const boundary = new Date(now);
+  boundary.setHours(0, 0, 0, 0);
+  boundary.setDate(boundary.getDate() + 2);
+  return boundary.getTime();
+}
 
 export type EventTiming = "upcoming" | "ongoing";
 

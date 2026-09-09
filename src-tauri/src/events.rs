@@ -2,6 +2,33 @@
 
 use serde::Serialize;
 
+/// How the user answered the invitation. Events with no attendees — a plain
+/// entry the user owns — report `Confirmed`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Response {
+    Confirmed,
+    Accepted,
+    Tentative,
+    Declined,
+    Pending,
+}
+
+/// EKParticipantStatus values: Unknown=0, Pending=1, Accepted=2, Declined=3,
+/// Tentative=4, Delegated=5, Completed=6, InProcess=7.
+pub(crate) fn response_for(status: isize, is_attendee: bool) -> Response {
+    if !is_attendee {
+        return Response::Confirmed;
+    }
+    match status {
+        2 | 6 | 7 => Response::Accepted,
+        3 => Response::Declined,
+        4 => Response::Tentative,
+        5 => Response::Pending,
+        _ => Response::Pending,
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpcomingEvent {
@@ -12,6 +39,7 @@ pub struct UpcomingEvent {
     pub calendar: Option<String>,
     pub location: Option<String>,
     pub join_url: Option<String>,
+    pub response: Response,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,8 +82,8 @@ pub(crate) const CALENDAR_PRIVACY_URLS: &[&str] = &[
 #[cfg(target_os = "macos")]
 mod macos {
     use super::{
-        access_action, access_granted, can_fetch_events, AccessAction, UpcomingEvent,
-        CALENDAR_PRIVACY_URLS,
+        access_action, access_granted, can_fetch_events, response_for, AccessAction, Response,
+        UpcomingEvent, CALENDAR_PRIVACY_URLS,
     };
     use block2::RcBlock;
     use objc2::rc::{autoreleasepool, Retained};
@@ -231,6 +259,22 @@ mod macos {
             .map(str::to_owned)
     }
 
+    /// The user's own answer to the invitation, read from the attendee list.
+    fn own_response(event: &objc2_event_kit::EKEvent) -> Response {
+        let Some(attendees) = (unsafe { event.attendees() }) else {
+            return Response::Confirmed;
+        };
+        for index in 0..attendees.count() {
+            let attendee = attendees.objectAtIndex(index);
+            if unsafe { attendee.isCurrentUser() } {
+                return response_for(unsafe { attendee.participantStatus() }.0, true);
+            }
+        }
+        // An invitation whose attendee list does not name us still counts as
+        // one: fall back to the organizer's view of the event.
+        Response::Confirmed
+    }
+
     pub fn fetch_macos_range(start_ms: i64, end_ms: i64) -> Result<Vec<UpcomingEvent>, String> {
         require_main_thread();
         autoreleasepool(|_| {
@@ -300,6 +344,7 @@ mod macos {
                     calendar,
                     location: location.filter(|value| !value.is_empty()),
                     join_url,
+                    response: own_response(&event),
                 });
             }
             found.sort_by_key(|event| event.start_at);
@@ -401,7 +446,10 @@ pub fn open_meeting(url: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{access_action, access_granted, can_fetch_events, AccessAction, CALENDAR_PRIVACY_URLS};
+    use super::{
+        access_action, access_granted, can_fetch_events, response_for, AccessAction, Response,
+        CALENDAR_PRIVACY_URLS,
+    };
 
     #[test]
     fn full_access_and_the_legacy_authorized_alias_are_granted() {
@@ -442,6 +490,16 @@ mod tests {
         assert!(CALENDAR_PRIVACY_URLS
             .iter()
             .any(|url| url.contains("preference.security")));
+    }
+
+    #[test]
+    fn invitation_answers_map_to_marker_styles() {
+        assert_eq!(response_for(0, false), Response::Confirmed);
+        assert_eq!(response_for(2, true), Response::Accepted);
+        assert_eq!(response_for(3, true), Response::Declined);
+        assert_eq!(response_for(4, true), Response::Tentative);
+        assert_eq!(response_for(1, true), Response::Pending);
+        assert_eq!(response_for(0, true), Response::Pending);
     }
 
     #[cfg(target_os = "macos")]

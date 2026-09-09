@@ -21,8 +21,8 @@ it("replaces startup permission failure when opened after granting access", asyn
   await vi.waitFor(() => expect(list.replaceChildren).toHaveBeenCalledWith(expect.objectContaining({ textContent: "Calendar access is not enabled" })));
   api.getCalendarEvents.mockResolvedValue([]);
   api.onEventsShown.mock.calls[0]![0]();
-  await vi.waitFor(() => expect(list.innerHTML).toContain("No upcoming events."));
-  expect(list.innerHTML).toContain("No upcoming events.");
+  await vi.waitFor(() => expect(list.innerHTML).toContain("Nothing left today or tomorrow."));
+  expect(list.innerHTML).toContain("Nothing left today or tomorrow.");
 
   // A delayed denied response must not replace a newer successful refresh.
   let reject!: (reason: string) => void;
@@ -32,5 +32,5 @@ it("replaces startup permission failure when opened after granting access", asyn
   await vi.waitFor(() => expect(api.getCalendarEvents).toHaveBeenCalledTimes(4));
   reject("Calendar access is not enabled");
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(list.innerHTML).toContain("No upcoming events.");
+  expect(list.innerHTML).toContain("Nothing left today or tomorrow.");
 });

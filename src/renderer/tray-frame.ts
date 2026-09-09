@@ -73,17 +73,44 @@ export function framedGlyphMask(text: string): string {
   return `url("${draw(text).toDataURL("image/png")}")`;
 }
 
-/** Slim rounded timer mark shown while an upcoming meeting countdown is active. */
-export function timerGlyphPng(): number[] {
+/** Slim rounded mark that leads the countdown in the menu bar. */
+const PILL_WIDTH = 8;
+/** Transparent run between the mark and the countdown. */
+const PILL_GAP = 12;
+/** Heavier than the system title, which the status item draws at regular. */
+const EVENT_FONT = '510 23px -apple-system, "SF Pro Text", system-ui, sans-serif';
+
+function measure(font: string, text: string): number {
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return 0;
+  ctx.font = font;
+  return ctx.measureText(text).width;
+}
+
+/**
+ * Mark plus countdown in one template image. Drawing the text ourselves buys
+ * the gap and the weight that a native status item title cannot express, and
+ * the template alpha still tints and inverts with the menu bar.
+ */
+export function eventGlyphPng(text: string): number[] {
   const canvas = document.createElement("canvas");
-  canvas.width = 8;
-  canvas.height = 32;
+  canvas.height = BOX;
+  canvas.width = text
+    ? Math.ceil(PILL_WIDTH + PILL_GAP + measure(EVENT_FONT, text) + 2)
+    : PILL_WIDTH;
+
   const ctx = canvas.getContext("2d");
   if (!ctx) return [];
   ctx.fillStyle = "#000";
   ctx.beginPath();
-  ctx.roundRect(0, 0, 8, 32, 4);
+  ctx.roundRect(0, 0, PILL_WIDTH, BOX, 4);
   ctx.fill();
+  if (text) {
+    ctx.font = EVENT_FONT;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, PILL_WIDTH + PILL_GAP, BOX / 2);
+  }
   const encoded = canvas.toDataURL("image/png").split(",")[1] ?? "";
   const binary = atob(encoded);
   return Array.from(binary, (character) => character.charCodeAt(0));

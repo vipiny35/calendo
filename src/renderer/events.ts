@@ -1,4 +1,4 @@
-import { eventStatus, type UpcomingEvent } from "../shared/events";
+import { endOfTomorrow, eventStatus, type EventResponse, type UpcomingEvent } from "../shared/events";
 import { installTauriBridge } from "./host";
 import { lucideIcon } from "./icons";
 import { ChevronRight, MapPin, Video } from "lucide";
@@ -28,6 +28,14 @@ function meetingLabel(url: string): string {
   return "Join meeting";
 }
 
+const RESPONSE_LABEL: Record<EventResponse, string> = {
+  confirmed: "",
+  accepted: "Accepted",
+  tentative: "Maybe",
+  declined: "Declined",
+  pending: "Not responded",
+};
+
 function sectionLabel(text: string): HTMLElement {
   const heading = document.createElement("p");
   heading.className = "section-label";
@@ -39,13 +47,15 @@ function eventRow(event: UpcomingEvent, withCalendar = false): HTMLElement {
   const row = document.createElement("div");
   row.className = "event interactive";
   const dot = document.createElement("span");
-  dot.className = "dot";
+  dot.className = `dot ${event.response}`;
+  if (event.response === "declined") row.classList.add("declined");
   const title = document.createElement("span");
   title.className = "title";
   const parts = [`${timeFormat.format(new Date(event.startAt))} · ${event.title}`];
   if (withCalendar && event.calendar) parts.push(event.calendar);
   title.textContent = parts.join(" · ");
-  row.title = title.textContent;
+  const response = RESPONSE_LABEL[event.response];
+  row.title = response ? `${title.textContent} — ${response}` : title.textContent;
   row.append(dot, title);
   return row;
 }
@@ -115,10 +125,10 @@ async function load(): Promise<void> {
   const revision = ++loadRevision;
   const now = Date.now();
   try {
-    const events = await api.getCalendarEvents(now, now + 2 * 86_400_000);
+    const events = await api.getCalendarEvents(now, endOfTomorrow(new Date(now)));
     if (revision !== loadRevision) return;
     const upcoming = events.filter((event) => event.endAt > now);
-    if (!upcoming.length) { list.innerHTML = '<p class="empty">No upcoming events.</p>'; syncHeight(); return; }
+    if (!upcoming.length) { list.innerHTML = '<p class="empty">Nothing left today or tomorrow.</p>'; syncHeight(); return; }
     const [next, ...rest] = upcoming as [UpcomingEvent, ...UpcomingEvent[]];
     const nodes: HTMLElement[] = featuredEvent(next, now);
     let currentDay = "";

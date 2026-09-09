@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { eventStatus, eventTimeRange, type UpcomingEvent } from "../src/shared/events";
+import {
+  endOfTomorrow,
+  eventStatus,
+  eventTimeRange,
+  type UpcomingEvent,
+} from "../src/shared/events";
 
 const event: UpcomingEvent = {
   id: "event-1",
@@ -9,6 +14,7 @@ const event: UpcomingEvent = {
   calendar: "Work",
   location: null,
   joinUrl: null,
+  response: "accepted",
 };
 
 describe("event status", () => {
@@ -32,5 +38,27 @@ describe("event status", () => {
 describe("event time range", () => {
   it("formats a compact local time range", () => {
     expect(eventTimeRange(event, "en-US")).toMatch(/\d+:\d{2}.*\d+:\d{2}/);
+  });
+});
+
+describe("today and tomorrow window", () => {
+  it("ends at the local midnight that closes tomorrow", () => {
+    const boundary = new Date(endOfTomorrow(new Date(2026, 8, 9, 23, 30)));
+    expect(boundary.getFullYear()).toBe(2026);
+    expect(boundary.getMonth()).toBe(8);
+    expect(boundary.getDate()).toBe(11);
+    expect(boundary.getHours()).toBe(0);
+    expect(boundary.getMinutes()).toBe(0);
+  });
+
+  it("covers the rest of today from early morning", () => {
+    const now = new Date(2026, 8, 9, 0, 5);
+    expect(endOfTomorrow(now) - now.getTime()).toBeGreaterThan(47 * 3_600_000);
+  });
+
+  it("crosses a month boundary", () => {
+    const boundary = new Date(endOfTomorrow(new Date(2026, 8, 30, 18, 0)));
+    expect(boundary.getMonth()).toBe(9);
+    expect(boundary.getDate()).toBe(2);
   });
 });
