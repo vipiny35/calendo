@@ -73,12 +73,18 @@ export function framedGlyphMask(text: string): string {
   return `url("${draw(text).toDataURL("image/png")}")`;
 }
 
-/** Slim rounded mark that leads the countdown in the menu bar. */
-const PILL_WIDTH = 8;
+/**
+ * 2x of the 22pt menu bar, so the glyph lands on retina pixels 1:1 instead of
+ * being stretched up from the 32px date badge.
+ */
+const EVENT_BOX = 44;
+/** Slim rounded mark that leads the countdown. */
+const PILL_WIDTH = 6;
+const PILL_HEIGHT = 30;
 /** Transparent run between the mark and the countdown. */
 const PILL_GAP = 12;
-/** Heavier than the system title, which the status item draws at regular. */
-const EVENT_FONT = '510 23px -apple-system, "SF Pro Text", system-ui, sans-serif';
+/** 13pt at 2x, a shade heavier than the regular system title. */
+const EVENT_FONT = '500 26px -apple-system, "SF Pro Text", system-ui, sans-serif';
 
 function measure(font: string, text: string): number {
   const ctx = document.createElement("canvas").getContext("2d");
@@ -94,7 +100,7 @@ function measure(font: string, text: string): number {
  */
 export function eventGlyphPng(text: string): number[] {
   const canvas = document.createElement("canvas");
-  canvas.height = BOX;
+  canvas.height = EVENT_BOX;
   canvas.width = text
     ? Math.ceil(PILL_WIDTH + PILL_GAP + measure(EVENT_FONT, text) + 2)
     : PILL_WIDTH;
@@ -103,13 +109,19 @@ export function eventGlyphPng(text: string): number[] {
   if (!ctx) return [];
   ctx.fillStyle = "#000";
   ctx.beginPath();
-  ctx.roundRect(0, 0, PILL_WIDTH, BOX, 4);
+  ctx.roundRect(
+    0,
+    (EVENT_BOX - PILL_HEIGHT) / 2,
+    PILL_WIDTH,
+    PILL_HEIGHT,
+    PILL_WIDTH / 2,
+  );
   ctx.fill();
   if (text) {
     ctx.font = EVENT_FONT;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(text, PILL_WIDTH + PILL_GAP, BOX / 2);
+    ctx.fillText(text, PILL_WIDTH + PILL_GAP, EVENT_BOX / 2);
   }
   const encoded = canvas.toDataURL("image/png").split(",")[1] ?? "";
   const binary = atob(encoded);
