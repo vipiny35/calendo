@@ -23,6 +23,7 @@ use tauri::{
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 
 const CALENDAR_LABEL: &str = "calendar";
+const EVENTS_LABEL: &str = "events";
 const SETTINGS_LABEL: &str = "settings";
 const TRAY_ID: &str = "calendo";
 const EVENT_TRAY_ID: &str = "calendo-event";
@@ -121,6 +122,12 @@ fn close_calendar(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
         let _ = window.hide();
         let _ = app.emit("calendar-hidden", ());
+    }
+}
+
+fn close_events(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(EVENTS_LABEL) {
+        let _ = window.hide();
     }
 }
 
@@ -296,6 +303,7 @@ fn position_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
 }
 
 fn show_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
+    close_events(app);
     position_calendar(app, tray_rect);
     if let Some(window) = app.get_webview_window(CALENDAR_LABEL) {
         let _ = window.show();
@@ -321,8 +329,31 @@ fn toggle_calendar(app: &AppHandle, tray_rect: tauri::Rect) {
     show_calendar(app, tray_rect);
 }
 
+fn show_events(app: &AppHandle, tray_rect: tauri::Rect) {
+    close_calendar(app);
+    let Some(window) = app.get_webview_window(EVENTS_LABEL) else { return; };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let pos: LogicalPosition<f64> = tray_rect.position.to_logical(scale);
+    let size: tauri::LogicalSize<f64> = tray_rect.size.to_logical(scale);
+    let _ = window.set_position(Position::Logical(LogicalPosition::new(
+        pos.x + size.width / 2.0 - 215.0,
+        pos.y + size.height,
+    )));
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+fn toggle_events(app: &AppHandle, tray_rect: tauri::Rect) {
+    let visible = app
+        .get_webview_window(EVENTS_LABEL)
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false);
+    if visible { close_events(app); } else { show_events(app, tray_rect); }
+}
+
 fn present_settings(app: &AppHandle) {
     close_calendar(app);
+    close_events(app);
     let _ = app.set_activation_policy(ActivationPolicy::Regular);
     if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
         let _ = window.unminimize();
@@ -393,7 +424,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                toggle_calendar(tray.app_handle(), rect);
+                toggle_events(tray.app_handle(), rect);
             }
         })
         .build(app)?;
@@ -462,6 +493,34 @@ fn build_calendar_window(app: &AppHandle) -> tauri::Result<()> {
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
             close_calendar(&handle);
+        }
+        _ => {}
+    });
+    Ok(())
+}
+
+fn build_events_window(app: &AppHandle) -> tauri::Result<()> {
+    let window = WebviewWindowBuilder::new(app, EVENTS_LABEL, WebviewUrl::App("events.html".into()))
+        .title("Upcoming Events")
+        .inner_size(430.0, 420.0)
+        .decorations(false)
+        .transparent(true)
+        .shadow(true)
+        .resizable(false)
+        .always_on_top(true)
+        .visible_on_all_workspaces(true)
+        .skip_taskbar(true)
+        .accept_first_mouse(true)
+        .visible(false)
+        .focused(false)
+        .build()?;
+    glass::apply_calendar_glass(&window);
+    let handle = app.clone();
+    window.on_window_event(move |event| match event {
+        WindowEvent::Focused(false) => close_events(&handle),
+        WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            close_events(&handle);
         }
         _ => {}
     });
@@ -615,6 +674,11 @@ fn hide_calendar(app: AppHandle) {
 }
 
 #[tauri::command]
+fn hide_events(app: AppHandle) {
+    close_events(&app);
+}
+
+#[tauri::command]
 fn set_calendar_pinned(state: State<AppState>, pinned: bool) {
     state.calendar_pinned.store(pinned, Ordering::SeqCst);
 }
@@ -710,6 +774,7 @@ pub fn run() {
             });
             set_launch_at_login(app.handle(), initial.launch_at_login);
             build_calendar_window(app.handle())?;
+            build_events_window(app.handle())?;
             build_settings_window(app.handle())?;
             apply_app_theme(app.handle(), &initial.theme);
             build_tray(app.handle())?;
@@ -723,6 +788,7 @@ pub fn run() {
             set_event_tray_label,
             beep,
             hide_calendar,
+            hide_events,
             set_calendar_pinned,
             open_settings,
             quit_app,
