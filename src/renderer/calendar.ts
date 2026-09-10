@@ -2,7 +2,6 @@ import {
   addDays,
   addMonths,
   buildMonth,
-  clampToMonth,
   dayName,
   fromIso,
   toIso,
@@ -20,7 +19,7 @@ import { eventGlyphPng, framedGlyphPng } from "./tray-frame";
 import { markPopoverMaterial } from "./popover-size";
 import { bandBox } from "./column-bands";
 import { installTauriBridge, type DesktopApi } from "./host";
-import { ChevronLeft, ChevronRight, CircleDot, Settings, Video } from "lucide";
+import { ChevronLeft, ChevronRight, Dot, Video } from "lucide";
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -84,9 +83,8 @@ function paintColumnHighlights(
   const lastRow = table.querySelector<HTMLElement>("tbody tr:last-child");
   if (!layer || headers.length < 7 || !firstBody || !lastRow) return;
   const wrapRect = wrap.getBoundingClientRect();
-  // The band covers the weekday letters as well as the dates below them.
   const rows = {
-    top: headers[0]!.getBoundingClientRect().top,
+    top: firstBody.getBoundingClientRect().top,
     bottom: lastRow.getBoundingClientRect().bottom,
   };
   layer.replaceChildren(
@@ -121,7 +119,6 @@ function startCalendar(api: DesktopApi): void {
   const prev = requireElement<HTMLButtonElement>("prev-month");
   const todayButton = requireElement<HTMLButtonElement>("today-month");
   const next = requireElement<HTMLButtonElement>("next-month");
-  const settingsButton = requireElement<HTMLButtonElement>("settings");
   const eventCard = requireElement<HTMLElement>("event-card");
   const eventStatusLabel = requireElement<HTMLElement>("event-status");
   const eventTitle = requireElement<HTMLElement>("event-title");
@@ -133,15 +130,17 @@ function startCalendar(api: DesktopApi): void {
   const dayEventsCount = requireElement<HTMLElement>("day-events-count");
   const dayEventsList = requireElement<HTMLElement>("day-events-list");
   prev.append(lucideIcon(ChevronLeft, 18));
-  todayButton.append(lucideIcon(CircleDot, 18));
+  todayButton.append(lucideIcon(Dot, 20, { "stroke-width": 10 }));
   next.append(lucideIcon(ChevronRight, 18));
-  settingsButton.append(lucideIcon(Settings, 16));
   joinMeeting.append(lucideIcon(Video, 15), document.createTextNode("Join Meeting"));
 
   let settings: AppSettings | null = null;
   let viewYear = new Date().getFullYear();
   let viewMonth = new Date().getMonth();
   let focusIso = toIso(new Date());
+  // Outside-day clicks keep a selection ring without changing month. Month
+  // chevrons must not reuse that ring on a spillover cell like "today, 10".
+  let pinnedOutsideIso: string | null = null;
   let lastTrayLabel = "";
   let lastEventTrayLabel = "";
   let lastHour = new Date().getHours();
@@ -334,20 +333,18 @@ function startCalendar(api: DesktopApi): void {
         button.setAttribute("aria-label", dayName(fromIso(day.iso)));
         if (day.inMonth) button.classList.add("is-in-month");
         else button.classList.add("is-outside");
-        if (day.isToday) {
+        if (day.isToday && day.inMonth) {
           button.classList.add("is-today");
           button.setAttribute("aria-current", "date");
         }
-        const focused = day.iso === focusIso;
+        const focused =
+          day.iso === focusIso && (day.inMonth || day.iso === pinnedOutsideIso);
         if (focused) button.classList.add("is-selected");
         button.tabIndex = focused ? 0 : -1;
         button.setAttribute("aria-selected", focused ? "true" : "false");
         button.addEventListener("click", () => {
           focusIso = day.iso;
-          if (!day.inMonth) {
-            viewYear = day.year;
-            viewMonth = day.month;
-          }
+          pinnedOutsideIso = day.inMonth ? null : day.iso;
           render({ focusGrid: true });
           paintDayEvents();
         });
@@ -373,8 +370,10 @@ function startCalendar(api: DesktopApi): void {
 
     if (opts?.announceMonth) announce(month.label);
     if (opts?.focusGrid) {
-      const current = grid.querySelector<HTMLButtonElement>(`[data-iso="${focusIso}"]`);
-      current?.focus();
+      const selector = pinnedOutsideIso
+        ? `[data-iso="${focusIso}"]`
+        : `[data-iso="${focusIso}"].is-in-month`;
+      grid.querySelector<HTMLButtonElement>(selector)?.focus();
     }
   };
 
@@ -383,6 +382,7 @@ function startCalendar(api: DesktopApi): void {
     viewYear = today.getFullYear();
     viewMonth = today.getMonth();
     focusIso = toIso(today);
+    pinnedOutsideIso = null;
     render({ announceMonth: true, focusGrid: true });
     paintDayEvents();
     void refreshUpcoming();
@@ -390,10 +390,9 @@ function startCalendar(api: DesktopApi): void {
 
   const shiftMonth = (delta: number): void => {
     const next = addMonths(viewYear, viewMonth, delta);
-    const keep = clampToMonth(fromIso(focusIso), next.year, next.month);
     viewYear = next.year;
     viewMonth = next.month;
-    focusIso = toIso(keep);
+    pinnedOutsideIso = null;
     render({ announceMonth: true, focusGrid: true });
     paintDayEvents();
     void refreshUpcoming();
@@ -402,6 +401,7 @@ function startCalendar(api: DesktopApi): void {
   const moveFocus = (days: number): void => {
     const next = addDays(fromIso(focusIso), days);
     focusIso = toIso(next);
+    pinnedOutsideIso = null;
     if (next.getMonth() !== viewMonth || next.getFullYear() !== viewYear) {
       viewYear = next.getFullYear();
       viewMonth = next.getMonth();
@@ -416,9 +416,6 @@ function startCalendar(api: DesktopApi): void {
   prev.addEventListener("click", () => shiftMonth(-1));
   todayButton.addEventListener("click", () => showToday());
   next.addEventListener("click", () => shiftMonth(1));
-  settingsButton.addEventListener("click", () => {
-    void api.openSettings();
-  });
   joinMeeting.addEventListener("click", () => {
     const url = upcomingEvent?.joinUrl;
     if (!url) return;
@@ -466,12 +463,14 @@ function startCalendar(api: DesktopApi): void {
     if (event.key === "Home") {
       event.preventDefault();
       focusIso = toIso(new Date(viewYear, viewMonth, 1));
+      pinnedOutsideIso = null;
       render({ focusGrid: true });
       return;
     }
     if (event.key === "End") {
       event.preventDefault();
       focusIso = toIso(new Date(viewYear, viewMonth + 1, 0));
+      pinnedOutsideIso = null;
       render({ focusGrid: true });
       return;
     }
