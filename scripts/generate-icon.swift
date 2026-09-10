@@ -183,13 +183,15 @@ struct TrayMetrics {
 }
 
 func trayMetrics() -> TrayMetrics {
-    let box = 32.0
+    // Status items are 18pt tall. A 36px bitmap is 2x and lands 1:1 on retina,
+    // so the tray does not have to scale the glyph and soften the edges.
+    let box = 36.0
     let scale = 2.0
-    let stroke = 1.65 * scale
-    let side = 15.0 * scale
+    let stroke = 1.25 * scale
+    let side = 16.0 * scale
     let inset = (box - side) / 2
     let radius = 3.7 * scale
-    let header = 4.35 * scale
+    let header = 4.4 * scale
     return TrayMetrics(
         box: box,
         scale: scale,
@@ -205,7 +207,7 @@ func trayMetrics() -> TrayMetrics {
 func drawDayNumber(_ day: Int, in hole: NSRect, scale: CGFloat) {
     let text = "\(day)" as NSString
     let fontSize = (day >= 10 ? 7.0 : 9.4) * scale
-    let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .medium)
+    let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .bold)
     let attributes: [NSAttributedString.Key: Any] = [
         .font: font,
         .foregroundColor: NSColor.black,
@@ -262,21 +264,21 @@ func trayCalendar() -> NSImage {
         outline.lineWidth = m.stroke
         outline.stroke()
 
-        let ruleY = m.card.minY + 3.6 * m.scale
-        let rule = NSBezierPath()
-        rule.move(to: NSPoint(x: card.minX - m.stroke / 2, y: ruleY))
-        rule.line(to: NSPoint(x: card.maxX + m.stroke / 2, y: ruleY))
-        rule.lineWidth = m.stroke
-        rule.stroke()
+        NSGraphicsContext.saveGraphicsState()
+        roundedRect(m.card, radius: m.radius).addClip()
+        NSColor.black.setFill()
+        NSRect(x: m.card.minX, y: m.card.minY, width: m.card.width, height: m.header).fill()
+        NSGraphicsContext.restoreGraphicsState()
 
         let padX = 1.55 * m.scale
         let padTop = 1.35 * m.scale
         let padBottom = 1.75 * m.scale
+        let headerBottom = m.card.minY + m.header
         let inner = NSRect(
             x: card.minX + m.stroke / 2 + padX,
-            y: ruleY + m.stroke / 2 + padTop,
+            y: headerBottom + padTop,
             width: card.width - m.stroke - padX * 2,
-            height: card.maxY - ruleY - m.stroke - padTop - padBottom
+            height: card.maxY - headerBottom - m.stroke / 2 - padTop - padBottom
         )
         let cols = 3
         let rows = 2

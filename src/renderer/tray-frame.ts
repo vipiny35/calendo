@@ -2,17 +2,20 @@
  * Rounded date badge with transparent text cutouts. macOS tints the template
  * image white on a dark menu bar and dark on a light menu bar.
  * The same drawing supplies the tray image and Appearance preview.
+ *
+ * The tray scales every status image to 18pt tall, so a 36px box is exactly
+ * 2x and lands on retina pixels 1:1.
  */
 
-const BOX = 32;
+const BOX = 36;
 /** Clear pixels around the badge. */
 const MARGIN = 1;
-const RADIUS = 7.4;
-// Keep the original font metrics for the badge width; enlarge only the text.
-const FONT = '590 19px -apple-system, "SF Pro Text", system-ui, sans-serif';
-const TEXT_FONT = '590 21px -apple-system, "SF Pro Text", system-ui, sans-serif';
+const RADIUS = 8.3;
+// Width uses a slightly smaller face so the badge does not grow with the cutout.
+const FONT = '700 21px -apple-system, "SF Pro Text", system-ui, sans-serif';
+const TEXT_FONT = '700 24px -apple-system, "SF Pro Text", system-ui, sans-serif';
 /** Space between the text and the badge edge. */
-const PAD_X = 8;
+const PAD_X = 9;
 
 function context(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   const ctx = canvas.getContext("2d");
