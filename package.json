@@ -1,6 +1,6 @@
 {
   "name": "calendo",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "license": "MIT",
   "description": "A menu bar calendar for macOS.",
