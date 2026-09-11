@@ -682,6 +682,37 @@ fn spawn_clock(app: AppHandle) {
     });
 }
 
+/// First look is delayed so launch is not racing the updater. Later looks
+/// are hours apart; GitHub does not need a check on every clock tick.
+const AUTO_UPDATE_FIRST_WAIT: Duration = Duration::from_secs(20);
+const AUTO_UPDATE_EVERY: Duration = Duration::from_secs(12 * 60 * 60);
+
+fn auto_update_enabled(app: &AppHandle) -> bool {
+    app.state::<AppState>()
+        .settings
+        .lock()
+        .map(|store| store.value().auto_update)
+        .unwrap_or(false)
+}
+
+/// Release builds only. A debug `pnpm app` bundle must not replace itself
+/// with the GitHub payload.
+fn spawn_auto_update(app: AppHandle) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    std::thread::spawn(move || {
+        std::thread::sleep(AUTO_UPDATE_FIRST_WAIT);
+        loop {
+            if auto_update_enabled(&app) {
+                let handle = app.clone();
+                let _ = tauri::async_runtime::block_on(apply_available_update(&handle));
+            }
+            std::thread::sleep(AUTO_UPDATE_EVERY);
+        }
+    });
+}
+
 #[tauri::command]
 fn get_settings(state: State<AppState>) -> Result<AppSettings, String> {
     state
@@ -720,6 +751,12 @@ fn update_settings(
     }
     if saved.theme != previous.theme {
         apply_app_theme(&app, &saved.theme);
+    }
+    if saved.auto_update && !previous.auto_update && !cfg!(debug_assertions) {
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = apply_available_update(&handle).await;
+        });
     }
     let _ = app.emit("settings-changed", &saved);
     Ok(saved)
@@ -983,11 +1020,12 @@ fn open_repository() -> Result<(), String> {
 /// Downloads the update, replaces the app bundle, and relaunches. Progress
 /// goes out as `update-progress` events carrying bytes downloaded of the
 /// total, so the window can show something while it works.
-#[tauri::command]
-async fn install_update(app: AppHandle) -> Result<(), String> {
+///
+/// Returns `Ok(false)` when the running build is already current.
+async fn apply_available_update(app: &AppHandle) -> Result<bool, String> {
     let updater = app.updater().map_err(|error| error.to_string())?;
     let Some(update) = updater.check().await.map_err(|error| error.to_string())? else {
-        return Err("Calendo is already up to date".into());
+        return Ok(false);
     };
 
     let progress = app.clone();
@@ -1011,6 +1049,15 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
 
     // The bundle on disk is the new one now; nothing here survives the swap.
     app.restart();
+}
+
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    if apply_available_update(&app).await? {
+        Ok(())
+    } else {
+        Err("Calendo is already up to date".into())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1044,6 +1091,7 @@ pub fn run() {
             apply_app_theme(app.handle(), &initial.theme);
             build_tray(app.handle())?;
             spawn_clock(app.handle().clone());
+            spawn_auto_update(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

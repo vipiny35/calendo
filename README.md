@@ -44,9 +44,10 @@ pnpm dmg
 Then open the disk image in `src-tauri/target/release/bundle/dmg` and drag
 Calendo to Applications.
 
-Once installed, Calendo updates itself: Settings offers the new version and
-installs it on one click. The update is signed, and a copy that cannot verify
-the signature refuses it.
+Once installed, Calendo can update itself. Settings → General has **Install
+updates automatically** on by default: a signed release downloads and the app
+restarts. Turn it off to keep checking by hand from the About pane. An update
+that cannot verify its signature is refused.
 
 ## Use
 
