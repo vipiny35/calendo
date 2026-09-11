@@ -39,9 +39,9 @@ const SETTINGS_LABEL: &str = "settings";
 const TRAY_ID: &str = "calendo";
 const EVENT_TRAY_ID: &str = "calendo-event";
 const AUTOSTART_ARG: &str = "--autostart";
-const CALENDAR_WIDTH: f64 = 288.0;
-const CALENDAR_WIDTH_WEEKS: f64 = 312.0;
-const CALENDAR_HEIGHT: f64 = 324.0;
+const CALENDAR_WIDTH: f64 = 264.0;
+const CALENDAR_WIDTH_WEEKS: f64 = 288.0;
+const CALENDAR_HEIGHT: f64 = 296.0;
 const SETTINGS_WIDTH: f64 = 560.0;
 const SETTINGS_HEIGHT: f64 = 560.0;
 
