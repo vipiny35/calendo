@@ -17,12 +17,39 @@ export type UpcomingEvent = {
   response: EventResponse;
 };
 
+const HOUR_MS = 3_600_000;
+
 /** Local midnight that ends the "today and tomorrow" window. */
 export function endOfTomorrow(now = new Date()): number {
   const boundary = new Date(now);
   boundary.setHours(0, 0, 0, 0);
   boundary.setDate(boundary.getDate() + 2);
   return boundary.getTime();
+}
+
+/** When the countdown and event-list look-ahead ends. */
+export function upcomingHorizonEnd(now: number, hours: number): number {
+  return now + hours * HOUR_MS;
+}
+
+/**
+ * Ongoing events stay visible. Future ones only appear when they start
+ * within the look-ahead, so a meeting tomorrow night does not occupy the
+ * menu bar all day.
+ */
+export function eventInUpcomingHorizon(
+  event: Pick<UpcomingEvent, "startAt" | "endAt">,
+  now: number,
+  hours: number,
+): boolean {
+  if (event.endAt <= now) return false;
+  return event.startAt <= upcomingHorizonEnd(now, hours);
+}
+
+export function upcomingHorizonEmpty(hours: number): string {
+  return hours === 1
+    ? "Nothing in the next hour."
+    : `Nothing in the next ${hours} hours.`;
 }
 
 export type EventTiming = "upcoming" | "ongoing";

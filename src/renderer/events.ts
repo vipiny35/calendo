@@ -1,10 +1,11 @@
-import { endOfTomorrow, eventStatus, type EventResponse, type UpcomingEvent } from "../shared/events";
+import { eventInUpcomingHorizon, eventStatus, upcomingHorizonEmpty, upcomingHorizonEnd, type EventResponse, type UpcomingEvent } from "../shared/events";
 import { installTauriBridge } from "./host";
 import { lucideIcon } from "./icons";
 import { meetingBrand } from "../shared/meetings";
 import { meetingIcon } from "./brand-icons";
 import { markPopoverMaterial, popoverHeight } from "./popover-size";
 import { MapPin } from "lucide";
+import { DEFAULT_SETTINGS, type UpcomingHorizonHours } from "../shared/settings";
 
 const api = installTauriBridge();
 const list = document.getElementById("list")!;
@@ -114,15 +115,16 @@ function syncHeight(): void {
 }
 
 let loadRevision = 0;
+let horizonHours = DEFAULT_SETTINGS.upcomingHorizonHours;
 
 async function load(): Promise<void> {
   const revision = ++loadRevision;
   const now = Date.now();
   try {
-    const events = await api.getCalendarEvents(now, endOfTomorrow(new Date(now)));
+    const events = await api.getCalendarEvents(now, upcomingHorizonEnd(now, horizonHours));
     if (revision !== loadRevision) return;
-    const upcoming = events.filter((event) => event.endAt > now);
-    if (!upcoming.length) { list.innerHTML = '<p class="empty">Nothing left today or tomorrow.</p>'; syncHeight(); return; }
+    const upcoming = events.filter((event) => eventInUpcomingHorizon(event, now, horizonHours));
+    if (!upcoming.length) { list.innerHTML = `<p class="empty">${upcomingHorizonEmpty(horizonHours)}</p>`; syncHeight(); return; }
     const [next, ...rest] = upcoming as [UpcomingEvent, ...UpcomingEvent[]];
     const nodes: HTMLElement[] = featuredEvent(next, now);
     let currentDay = "";
@@ -147,6 +149,13 @@ async function load(): Promise<void> {
   }
 }
 void markPopoverMaterial(() => api.getPopoverMaterial());
+function applyHorizon(hours: UpcomingHorizonHours): void {
+  if (hours === horizonHours) return;
+  horizonHours = hours;
+  void load();
+}
+void api.getSettings().then((settings) => applyHorizon(settings.upcomingHorizonHours));
+api.onSettingsChanged((settings) => applyHorizon(settings.upcomingHorizonHours));
 api.onEventsShown(() => void load());
 api.onClockTick(() => void load());
 void load();

@@ -26,6 +26,7 @@ describe("normalizeSettings", () => {
       launchAtLogin: true,
       beepOnTheHour: true,
       showUpcomingEvent: true,
+      upcomingHorizonHours: 4,
       theme: "dark",
     });
     expect(result.menuBarIcon).toBe("framed");
@@ -37,6 +38,7 @@ describe("normalizeSettings", () => {
     expect(result.launchAtLogin).toBe(true);
     expect(result.beepOnTheHour).toBe(true);
     expect(result.showUpcomingEvent).toBe(true);
+    expect(result.upcomingHorizonHours).toBe(4);
     expect(result.theme).toBe("dark");
   });
 
@@ -51,6 +53,12 @@ describe("normalizeSettings", () => {
   it("installs updates automatically by default", () => {
     expect(normalizeSettings({}).autoUpdate).toBe(true);
     expect(normalizeSettings({ autoUpdate: false }).autoUpdate).toBe(false);
+  });
+
+  it("looks six hours ahead unless an offered horizon is stored", () => {
+    expect(normalizeSettings({}).upcomingHorizonHours).toBe(6);
+    expect(normalizeSettings({ upcomingHorizonHours: 2 }).upcomingHorizonHours).toBe(2);
+    expect(normalizeSettings({ upcomingHorizonHours: 3 }).upcomingHorizonHours).toBe(6);
   });
 
   it("migrates dim weekends off to no highlighted columns", () => {

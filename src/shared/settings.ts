@@ -2,6 +2,8 @@ export type WeekStartsOn = Weekday;
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type Theme = "system" | "light" | "dark";
 export type MenuBarIconStyle = "filled" | "framed" | "calendar" | "none";
+export const UPCOMING_HORIZON_HOURS = [1, 2, 4, 6, 8] as const;
+export type UpcomingHorizonHours = (typeof UPCOMING_HORIZON_HOURS)[number];
 
 export type AppSettings = {
   menuBarIcon: MenuBarIconStyle;
@@ -13,6 +15,7 @@ export type AppSettings = {
   launchAtLogin: boolean;
   beepOnTheHour: boolean;
   showUpcomingEvent: boolean;
+  upcomingHorizonHours: UpcomingHorizonHours;
   autoUpdate: boolean;
   theme: Theme;
 };
@@ -91,6 +94,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   launchAtLogin: false,
   beepOnTheHour: false,
   showUpcomingEvent: false,
+  upcomingHorizonHours: 6,
   autoUpdate: true,
   theme: "system",
 };
@@ -98,6 +102,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 const ICON_IDS = new Set(MENU_BAR_ICONS.map((item) => item.id));
 const WEEK_START_IDS = new Set(WEEK_STARTS.map((item) => item.id));
 const THEMES = new Set<Theme>(["system", "light", "dark"]);
+const HORIZON_HOURS = new Set<number>(UPCOMING_HORIZON_HOURS);
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
@@ -258,6 +263,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
       input.showUpcomingEvent,
       DEFAULT_SETTINGS.showUpcomingEvent,
     ),
+    upcomingHorizonHours: HORIZON_HOURS.has(input.upcomingHorizonHours as number)
+      ? (input.upcomingHorizonHours as UpcomingHorizonHours)
+      : DEFAULT_SETTINGS.upcomingHorizonHours,
     autoUpdate: asBoolean(input.autoUpdate, DEFAULT_SETTINGS.autoUpdate),
     theme: THEMES.has(theme as Theme) ? (theme as Theme) : DEFAULT_SETTINGS.theme,
   };

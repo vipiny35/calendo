@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   endOfTomorrow,
+  eventInUpcomingHorizon,
   eventStatus,
   eventTimeRange,
+  upcomingHorizonEmpty,
+  upcomingHorizonEnd,
   type UpcomingEvent,
 } from "../src/shared/events";
 
@@ -67,5 +70,34 @@ describe("today and tomorrow window", () => {
     const boundary = new Date(endOfTomorrow(new Date(2026, 8, 30, 18, 0)));
     expect(boundary.getMonth()).toBe(9);
     expect(boundary.getDate()).toBe(2);
+  });
+});
+
+describe("upcoming look-ahead", () => {
+  const now = Date.UTC(2026, 8, 9, 10, 0);
+
+  it("keeps an event that starts inside the window", () => {
+    expect(eventInUpcomingHorizon(event, now, 6)).toBe(true);
+  });
+
+  it("keeps a meeting that has already started", () => {
+    expect(eventInUpcomingHorizon(event, Date.UTC(2026, 8, 9, 10, 40), 1)).toBe(true);
+  });
+
+  it("drops an event that starts after the window", () => {
+    expect(eventInUpcomingHorizon(event, Date.UTC(2026, 8, 9, 3, 0), 6)).toBe(false);
+  });
+
+  it("drops an event that has already ended", () => {
+    expect(eventInUpcomingHorizon(event, Date.UTC(2026, 8, 9, 12, 0), 8)).toBe(false);
+  });
+
+  it("names the empty list from the window", () => {
+    expect(upcomingHorizonEmpty(1)).toBe("Nothing in the next hour.");
+    expect(upcomingHorizonEmpty(6)).toBe("Nothing in the next 6 hours.");
+  });
+
+  it("ends the fetch window after the chosen hours", () => {
+    expect(upcomingHorizonEnd(now, 4) - now).toBe(4 * 3_600_000);
   });
 });

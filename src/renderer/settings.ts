@@ -2,11 +2,13 @@ import {
   supportsDateParts,
   HIGHLIGHT_DAYS,
   MENU_BAR_ICONS,
+  UPCOMING_HORIZON_HOURS,
   WEEK_STARTS,
   weekdayLetter,
   type AppSettings,
   type MenuBarIconStyle,
   type Theme,
+  type UpcomingHorizonHours,
   type Weekday,
   type WeekStartsOn,
 } from "../shared/settings";
@@ -103,6 +105,7 @@ function startSettings(api: DesktopApi): void {
   const beep = requireElement<HTMLInputElement>("beep");
   const autoUpdate = requireElement<HTMLInputElement>("auto-update");
   const showUpcoming = requireElement<HTMLInputElement>("show-upcoming");
+  const upcomingHorizon = requireElement<HTMLSelectElement>("upcoming-horizon");
   const calendarAccessStatus = requireElement<HTMLParagraphElement>("calendar-access-status");
   const calendarAccess = requireElement<HTMLButtonElement>("calendar-access");
   const calendarAccessRow = requireElement<HTMLElement>("calendar-access-row");
@@ -121,6 +124,13 @@ function startSettings(api: DesktopApi): void {
     WEEK_STARTS.map((item) => ({
       value: String(item.id),
       label: item.label,
+    })),
+  );
+  fillSelect(
+    upcomingHorizon,
+    UPCOMING_HORIZON_HOURS.map((hours) => ({
+      value: String(hours),
+      label: hours === 1 ? "1 hour" : `${hours} hours`,
     })),
   );
 
@@ -167,6 +177,11 @@ function startSettings(api: DesktopApi): void {
     }
   };
 
+  const paintHorizon = (enabled: boolean): void => {
+    upcomingHorizon.disabled = !enabled;
+    upcomingHorizon.closest(".row")?.classList.toggle("is-off", !enabled);
+  };
+
   const paint = (settings: AppSettings): void => {
     applyTheme(settings.theme);
     paintIconStyle(iconStyles, settings.menuBarIcon);
@@ -180,6 +195,8 @@ function startSettings(api: DesktopApi): void {
     beep.checked = settings.beepOnTheHour;
     autoUpdate.checked = settings.autoUpdate;
     showUpcoming.checked = settings.showUpcomingEvent;
+    upcomingHorizon.value = String(settings.upcomingHorizonHours);
+    paintHorizon(settings.showUpcomingEvent);
     theme.value = settings.theme;
   };
 
@@ -193,6 +210,7 @@ function startSettings(api: DesktopApi): void {
     beepOnTheHour: beep.checked,
     autoUpdate: autoUpdate.checked,
     showUpcomingEvent: showUpcoming.checked,
+    upcomingHorizonHours: Number(upcomingHorizon.value) as UpcomingHorizonHours,
     theme: theme.value as Theme,
   });
 
@@ -217,6 +235,7 @@ function startSettings(api: DesktopApi): void {
   form.addEventListener("change", () => {
     const patch = patchFromForm();
     applyTheme(patch.theme ?? "system");
+    paintHorizon(patch.showUpcomingEvent ?? false);
     void api.updateSettings(patch);
   });
 

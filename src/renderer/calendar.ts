@@ -13,7 +13,7 @@ import {
   occupancyFromWeeks,
 } from "../shared/month-outline";
 import { menuBarLabel, highlightedColumnRuns, type AppSettings } from "../shared/settings";
-import { eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/events";
+import { eventInUpcomingHorizon, eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/events";
 import { lucideIcon } from "./icons";
 import { eventGlyphPng, framedGlyphPng } from "./tray-frame";
 import { markPopoverMaterial } from "./popover-size";
@@ -156,7 +156,8 @@ function startCalendar(api: DesktopApi): void {
 
   const refreshUpcoming = async (): Promise<void> => {
     const request = ++eventRequest;
-    if (!settings?.showUpcomingEvent) {
+    const current = settings;
+    if (!current?.showUpcomingEvent) {
       upcomingEvent = null;
       calendarEvents = [];
       eventError = null;
@@ -176,7 +177,11 @@ function startCalendar(api: DesktopApi): void {
         // Calendar grid decorations belong to the events popover and are optional.
       }
       if (request !== eventRequest) return;
-      upcomingEvent = nextEvent;
+      const now = Date.now();
+      upcomingEvent =
+        nextEvent && eventInUpcomingHorizon(nextEvent, now, current.upcomingHorizonHours)
+          ? nextEvent
+          : null;
       calendarEvents = monthEvents;
       eventError = null;
     } catch (error) {
