@@ -1,6 +1,6 @@
 [package]
 name = "calendo"
-version = "0.3.2"
+version = "0.3.3"
 description = "A menu bar calendar for macOS"
 authors = ["Vipin Yadav"]
 license = "MIT"
