@@ -2,19 +2,16 @@
   color-scheme: light dark;
   --ink: #dedee0;
   --muted: #929296;
-  --hover: rgba(255, 255, 255, 0.09);
-  --rule: rgba(255, 255, 255, 0.13);
   /* Tints the menu material behind the webview rather than replacing it. */
   --scrim: rgb(0 0 0 / 22%);
   --rim: rgb(255 255 255 / 12%);
+  --accent: #338ce6;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
 }
 @media (prefers-color-scheme: light) {
   :root {
     --ink: #252527;
     --muted: #727276;
-    --hover: rgba(0, 0, 0, 0.07);
-    --rule: rgba(0, 0, 0, 0.11);
     --scrim: rgb(255 255 255 / 16%);
     --rim: rgb(0 0 0 / 12%);
   }
@@ -38,17 +35,10 @@ html, body {
   box-shadow: inset 0 0 0 0.5px var(--rim);
   color: var(--ink);
 }
-/* The list gives way first, so the footer stays put once the popover is
-   taller than the screen allows. The window grows with its content, so a
-   scrollbar would only ever show on a day too long for the screen. */
+/* The list fills the window and scrolls only when a day is too long for the
+   screen; the window otherwise grows with its content. */
 #list { min-height: 0; flex: 1 1 auto; overflow: auto; }
 #list::-webkit-scrollbar { display: none; }
-.footer {
-  flex: 0 0 auto;
-  margin: 7px 0 0;
-  padding-top: 6px;
-  border-top: 1px solid var(--rule);
-}
 :root[data-material="glass"] .events-popover {
   background: transparent;
   box-shadow: none;
@@ -62,8 +52,7 @@ html, body {
 }
 .section-label:first-child { margin-top: 0; }
 .event,
-.detail-row,
-.menu-row {
+.detail-row {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -78,31 +67,18 @@ html, body {
   font: inherit;
   text-align: left;
 }
-/* AccentColor is the user's own highlight, the same one AppKit menus use. */
+/* The same blue as the calendar, rather than the system accent. */
 .event.interactive:hover,
-.detail-row.interactive:hover,
-.menu-row:hover {
-  background: var(--hover);
+.detail-row.interactive:hover {
+  background: var(--accent);
+  color: #fff;
 }
-@supports (background: AccentColor) {
-  .event.interactive:hover,
-  .detail-row.interactive:hover,
-  .menu-row:hover {
-    background: AccentColor;
-    /* AccentColorText resolves to black in this WebKit, which reads as ink
-       spilled over the highlight; AppKit paints menu highlights white. */
-    color: #fff;
-  }
-  .detail-row.interactive:hover .label,
-  .detail-row.interactive:hover .glyph svg,
-  .event.declined.interactive:hover .title { color: inherit; opacity: 1; }
-  /* Only the plain camera follows the highlight; a service's own mark keeps
-     its colours, and the answer markers keep theirs. */
-  .detail-row.interactive:hover .glyph svg { fill: currentColor; stroke: currentColor; }
-}
+.detail-row.interactive:hover .label,
+.detail-row.interactive:hover .glyph svg,
+.event.declined.interactive:hover .title { color: inherit; opacity: 1; }
+.detail-row.interactive:hover .glyph svg { fill: currentColor; stroke: currentColor; }
 .event.interactive,
-.detail-row.interactive,
-.menu-row { cursor: default; }
+.detail-row.interactive { cursor: default; }
 /* Invitation answers follow the calendar convention: solid when accepted,
    diagonally hatched for maybe, a dotted outline while unanswered, and
    struck through when declined. */
@@ -163,7 +139,6 @@ html, body {
   color: var(--ink);
   opacity: 0.9;
 }
-.menu-row .label,
 .detail-row .label {
   min-width: 0;
   overflow: hidden;

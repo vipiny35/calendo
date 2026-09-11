@@ -10,7 +10,7 @@ Apple Silicon and Intel Macs on macOS 13 or newer.
 
 Click the date in the menu bar to open this month. Move between months, jump
 back to today, and close it by clicking outside or pressing Escape. Right-click
-the menu bar item, or the cog in the popover, for Settings.
+either menu bar item for Settings and Quit.
 
 The menu bar item can be a filled date, a date inside a rounded outline, a
 calendar, or the date alone. Every style but the filled one can add the weekday
@@ -53,12 +53,11 @@ the signature refuses it.
 Calendo stays in the menu bar after you quit every other window.
 
 - **Left click** opens the month.
-- **Right click** offers Settings and Quit.
-- **The countdown item**, when upcoming events are on, opens the event list;
-  Settings and Quit sit below a rule at its foot.
+- **Right click** on either menu bar item offers Settings and Quit.
+- **The countdown item**, when upcoming events are on, opens the event list.
 - **Arrow keys** move by day or week; **Page Up** / **Page Down** change month;
   **T** returns to today; **Esc** closes the popover.
-- The cog, or **⌘,**, opens Settings.
+- **⌘,** opens Settings.
 
 Nothing leaves this Mac. There is no account or network connection. Optional
 upcoming events come from the local macOS Calendar database through EventKit.

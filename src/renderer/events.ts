@@ -141,12 +141,6 @@ async function load(): Promise<void> {
     syncHeight();
   }
 }
-document.getElementById("settings")?.addEventListener("click", () => {
-  // Presenting Settings closes the popover on the Rust side.
-  void api.openSettings();
-});
-document.getElementById("quit")?.addEventListener("click", () => void api.quitApp());
-
 void markPopoverMaterial(() => api.getPopoverMaterial());
 api.onEventsShown(() => void load());
 api.onClockTick(() => void load());

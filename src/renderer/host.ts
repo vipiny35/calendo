@@ -43,7 +43,6 @@ export type DesktopApi = {
   getPopoverMaterial: () => Promise<string>;
   setCalendarPinned: (pinned: boolean) => Promise<void>;
   openSettings: () => Promise<void>;
-  quitApp: () => Promise<void>;
   getAppVersion: () => Promise<string>;
   onSettingsChanged: (listener: (settings: AppSettings) => void) => () => void;
   onCalendarShown: (listener: () => void) => () => void;
@@ -114,7 +113,6 @@ export const api: DesktopApi = {
   getPopoverMaterial: () => invoke<string>("popover_material"),
   setCalendarPinned: (pinned) => invoke<void>("set_calendar_pinned", { pinned }),
   openSettings: () => invoke<void>("open_settings"),
-  quitApp: () => invoke<void>("quit_app"),
   getAppVersion: () => invoke<string>("app_version"),
   onSettingsChanged: (listener) => subscribe<AppSettings>("settings-changed", listener),
   onCalendarShown: (listener) => subscribe<void>("calendar-shown", listener),
