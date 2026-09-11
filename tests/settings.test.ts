@@ -48,7 +48,7 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings({}).highlightWeekdays).toEqual([0, 6]);
   });
 
-  it("enables automatic update checks by default", () => {
+  it("installs updates automatically by default", () => {
     expect(normalizeSettings({}).autoUpdate).toBe(true);
     expect(normalizeSettings({ autoUpdate: false }).autoUpdate).toBe(false);
   });

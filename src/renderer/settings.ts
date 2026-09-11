@@ -254,13 +254,21 @@ function startSettings(api: DesktopApi): void {
     void api.beep();
   });
 
-  const checkForUpdates = async (): Promise<void> => {
+  const checkForUpdates = async (installIfFound = false): Promise<void> => {
     updateStatus.textContent = "Checking…";
     installUpdate.hidden = true;
     try {
       const offer = await api.checkForUpdates();
       if (!offer.version) {
         updateStatus.textContent = "Calendo is up to date.";
+        return;
+      }
+      if (installIfFound) {
+        updateStatus.textContent = `Installing ${offer.version}…`;
+        void api.installUpdate().catch((error: unknown) => {
+          const detail = typeof error === "string" ? error : "Update failed";
+          updateStatus.textContent = detail;
+        });
         return;
       }
       updateStatus.textContent = `Version ${offer.version} is available.`;
@@ -271,7 +279,7 @@ function startSettings(api: DesktopApi): void {
       updateStatus.textContent = `Update check failed: ${detail}`;
     }
   };
-  checkUpdates.addEventListener("click", () => void checkForUpdates());
+  checkUpdates.addEventListener("click", () => void checkForUpdates(autoUpdate.checked));
 
   // The app relaunches itself when this finishes, so success needs no message.
   installUpdate.addEventListener("click", () => {
@@ -296,7 +304,6 @@ function startSettings(api: DesktopApi): void {
 
   void api.getSettings().then((settings) => {
     paint(settings);
-    if (settings.autoUpdate) void checkForUpdates();
     void refreshCalendarAccess();
   });
   void api.getAppVersion().then((value) => {

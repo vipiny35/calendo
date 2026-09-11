@@ -1,20 +1,24 @@
-// Background for the install window. The disk image places the app icon at
-// (180, 170) and the Applications alias at (480, 170) measured from the top
-// left, both 128pt wide, so the arrow lives in the gap between them and the
-// caption sits below their labels.
+// Background for the install window. Finder draws the app and Applications
+// icons itself at (170, 175) and (550, 175), 128pt wide. This image only
+// fills the gap: "drag and drop" and a curved arrow pointing at Applications.
 //
-// Writes a 1x and a 2x bitmap; scripts/../package.json folds them into the
-// multi-resolution TIFF that Finder reads, so the caption stays sharp on a
-// retina display.
+// Writes a 1x and a 2x bitmap; `pnpm dmg:background` folds them into the
+// multi-resolution TIFF that Finder reads, so the type stays sharp on retina.
 import AppKit
 
-let width = 660.0
+let width = 720.0
 let height = 400.0
-let iconCenterY = 170.0
-let appRight = 180.0 + 64.0
-let folderLeft = 480.0 - 64.0
-let space = CGColorSpaceCreateDeviceRGB()
-let slate = CGColor(colorSpace: space, components: [0.62, 0.62, 0.66, 1])!
+let iconCenterY = 175.0
+let appCenterX = 170.0
+let folderCenterX = 550.0
+let appRight = appCenterX + 64.0
+let folderLeft = folderCenterX - 64.0
+
+func roundedFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
+  let base = NSFont.systemFont(ofSize: size, weight: weight)
+  guard let descriptor = base.fontDescriptor.withDesign(.rounded) else { return base }
+  return NSFont(descriptor: descriptor, size: size) ?? base
+}
 
 func render(scale: Int) -> Data? {
   guard let rep = NSBitmapImageRep(
@@ -29,7 +33,6 @@ func render(scale: Int) -> Data? {
     bytesPerRow: 0,
     bitsPerPixel: 0
   ) else { return nil }
-  // Drawing stays in points; the extra pixels come from the rep's own size.
   rep.size = NSSize(width: width, height: height)
 
   guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
@@ -37,53 +40,55 @@ func render(scale: Int) -> Data? {
   NSGraphicsContext.current = context
   let ctx = context.cgContext
 
-  // A quiet vertical wash, lighter at the top like a Finder window.
-  let colors = [
-    CGColor(colorSpace: space, components: [0.976, 0.976, 0.984, 1])!,
-    CGColor(colorSpace: space, components: [0.925, 0.925, 0.941, 1])!,
-  ]
-  if let gradient = CGGradient(
-    colorsSpace: space, colors: colors as CFArray, locations: [0, 1]
-  ) {
-    ctx.drawLinearGradient(
-      gradient,
-      start: CGPoint(x: 0, y: height),
-      end: CGPoint(x: 0, y: 0),
-      options: []
-    )
-  }
+  NSColor.white.setFill()
+  ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
 
-  // Arrow, in Core Graphics coordinates where y counts up from the bottom.
+  let ink = NSColor(calibratedRed: 0.12, green: 0.24, blue: 0.42, alpha: 1)
   let y = height - iconCenterY
-  let start = appRight + 26.0
-  let end = folderLeft - 26.0
-  let head = 13.0
-  ctx.setStrokeColor(slate)
-  ctx.setLineWidth(3.5)
-  ctx.setLineCap(.round)
-  ctx.move(to: CGPoint(x: start, y: y))
-  ctx.addLine(to: CGPoint(x: end - head, y: y))
-  ctx.strokePath()
 
-  ctx.setFillColor(slate)
-  ctx.move(to: CGPoint(x: end, y: y))
-  ctx.addLine(to: CGPoint(x: end - head, y: y + head * 0.72))
-  ctx.addLine(to: CGPoint(x: end - head, y: y - head * 0.72))
-  ctx.closePath()
-  ctx.fillPath()
-
-  // Caption, clear of the icon labels underneath the icons.
   let style = NSMutableParagraphStyle()
   style.alignment = .center
-  let text = NSAttributedString(
-    string: "Drag Calendo to your Applications folder",
+  let caption = NSAttributedString(
+    string: "drag and drop",
     attributes: [
-      .font: NSFont.systemFont(ofSize: 13, weight: .regular),
-      .foregroundColor: NSColor(calibratedWhite: 0.42, alpha: 1),
+      .font: roundedFont(size: 28, weight: .semibold),
+      .foregroundColor: ink,
       .paragraphStyle: style,
     ]
   )
-  text.draw(in: NSRect(x: 0, y: height - 320, width: width, height: 24))
+  let textHeight = 34.0
+  caption.draw(
+    in: NSRect(x: 0, y: y + 16, width: width, height: textHeight)
+  )
+
+  let start = CGPoint(x: appRight + 18, y: y - 6)
+  let end = CGPoint(x: folderLeft - 10, y: y + 2)
+  let control1 = CGPoint(x: start.x + 70, y: start.y - 58)
+  let control2 = CGPoint(x: end.x - 95, y: end.y - 52)
+  let head = 14.0
+  let tangent = CGPoint(x: end.x - control2.x, y: end.y - control2.y)
+  let length = hypot(tangent.x, tangent.y)
+  let ux = tangent.x / length
+  let uy = tangent.y / length
+  let px = -uy
+  let py = ux
+  let tip = end
+  let base = CGPoint(x: end.x - ux * head, y: end.y - uy * head)
+  let shaftEnd = CGPoint(x: end.x - ux * (head * 0.45), y: end.y - uy * (head * 0.45))
+
+  ctx.setStrokeColor(ink.cgColor)
+  ctx.setFillColor(ink.cgColor)
+  ctx.setLineWidth(4.25)
+  ctx.setLineCap(.round)
+  ctx.move(to: start)
+  ctx.addCurve(to: shaftEnd, control1: control1, control2: control2)
+  ctx.strokePath()
+
+  ctx.move(to: tip)
+  ctx.addLine(to: CGPoint(x: base.x + px * head * 0.58, y: base.y + py * head * 0.58))
+  ctx.addLine(to: CGPoint(x: base.x - px * head * 0.58, y: base.y - py * head * 0.58))
+  ctx.closePath()
+  ctx.fillPath()
 
   NSGraphicsContext.restoreGraphicsState()
   return rep.representation(using: .png, properties: [:])
