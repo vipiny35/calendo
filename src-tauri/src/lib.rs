@@ -39,9 +39,9 @@ const SETTINGS_LABEL: &str = "settings";
 const TRAY_ID: &str = "calendo";
 const EVENT_TRAY_ID: &str = "calendo-event";
 const AUTOSTART_ARG: &str = "--autostart";
-const CALENDAR_WIDTH: f64 = 288.0;
-const CALENDAR_WIDTH_WEEKS: f64 = 312.0;
-const CALENDAR_HEIGHT: f64 = 348.0;
+const CALENDAR_WIDTH: f64 = 264.0;
+const CALENDAR_WIDTH_WEEKS: f64 = 288.0;
+const CALENDAR_HEIGHT: f64 = 296.0;
 const SETTINGS_WIDTH: f64 = 560.0;
 const SETTINGS_HEIGHT: f64 = 560.0;
 
@@ -518,8 +518,8 @@ fn handle_menu_action(app: &AppHandle, id: &str) {
 }
 
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let settings = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Calendo", true, Some("CmdOrCtrl+Q"))?;
+    let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Calendo", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     Menu::with_items(
         app,
@@ -532,13 +532,12 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let menu = build_tray_menu(app)?;
     let icon = tauri::image::Image::from_bytes(include_bytes!("../../icons/tray-icon.png"))?;
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .icon_as_template(true)
         .tooltip("Calendo")
-        .menu(&menu)
+        .menu(&build_tray_menu(app)?)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| handle_menu_action(app, event.id().as_ref()))
         .on_tray_icon_event(|tray, event| {
@@ -555,7 +554,9 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .build(app)?;
     let event_tray = TrayIconBuilder::with_id(EVENT_TRAY_ID)
         .tooltip("Upcoming event")
+        .menu(&build_tray_menu(app)?)
         .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| handle_menu_action(app, event.id().as_ref()))
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
@@ -853,11 +854,6 @@ fn open_settings(app: AppHandle) {
     present_settings(&app);
 }
 
-#[tauri::command]
-fn quit_app(app: AppHandle) {
-    app.exit(0);
-}
-
 fn on_main<T, F>(app: &AppHandle, work: F) -> Result<T, String>
 where
     T: Send + 'static,
@@ -1062,7 +1058,6 @@ pub fn run() {
             popover_material,
             set_calendar_pinned,
             open_settings,
-            quit_app,
             app_version,
             check_for_updates,
             install_update,

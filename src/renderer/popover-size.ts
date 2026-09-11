@@ -13,17 +13,28 @@ function boxHeight(element: HTMLElement | null): number {
   );
 }
 
+/**
+ * Rows only. The list itself flexes to fill the window, so its scrollHeight
+ * grows with every resize and would feed the next one if we measured it.
+ */
+function listContentHeight(list: HTMLElement): number {
+  let height = 0;
+  for (const row of Array.from(list.children ?? [])) {
+    height += boxHeight(row as HTMLElement);
+  }
+  return height;
+}
+
 export function popoverHeight(list: HTMLElement, root: ParentNode = document): number {
-  const content = list.scrollHeight;
+  const content = listContentHeight(list);
   if (!content) return 0;
   const frame = root.querySelector<HTMLElement>(".events-popover");
   const style = frame ? getComputedStyle(frame) : null;
   const padding = style
     ? parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
     : 16;
-  const footer = boxHeight(root.querySelector<HTMLElement>(".footer"));
   // A pixel of slack absorbs the rounding of fractional line heights.
-  return Math.ceil(content + footer + padding) + 1;
+  return Math.ceil(content + padding) + 1;
 }
 
 /**

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { BAND_BLEED, BAND_LIFT, bandBox } from "../src/renderer/column-bands";
 
-// A 288pt popover with 10pt side padding gives seven ~38.3pt columns; the
-// selection ring inside a day cell is 34pt wide.
-const COLUMN = 38.3;
-const RING = 34;
+// A 264pt popover with 10pt side padding gives seven ~34.9pt columns; the
+// selection ring inside a day cell is 30pt wide.
+const COLUMN = 34.9;
+const RING = 30;
 const origin = { left: 100, top: 50 };
 
 describe("weekday highlight bands", () => {

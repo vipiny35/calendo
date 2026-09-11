@@ -401,11 +401,11 @@ body {
 }
 
 .weekday {
-  height: 34px;
-  padding-bottom: 18px;
-  font-size: 16px;
+  height: 30px;
+  padding-bottom: 16px;
+  font-size: 15px;
   letter-spacing: 0.02em;
-  line-height: 16px;
+  line-height: 15px;
 }
 
 .weeknum {
@@ -418,17 +418,17 @@ body {
 }
 
 thead .weeknum {
-  height: 34px;
-  padding-bottom: 18px;
+  height: 30px;
+  padding-bottom: 16px;
 }
 
 .grid tbody td {
-  height: 36px;
+  height: 32px;
 }
 
 .grid tbody .weeknum {
-  height: 36px;
-  line-height: 36px;
+  height: 32px;
+  line-height: 32px;
 }
 
 .day {
@@ -437,7 +437,7 @@ thead .weeknum {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 36px;
+  height: 32px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -451,10 +451,10 @@ thead .weeknum {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
-  font-size: 16px;
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   line-height: 1;
