@@ -11,7 +11,7 @@ export type MeetingBrand =
 
 const HOSTS: { brand: MeetingBrand; label: string; hosts: string[] }[] = [
   { brand: "meet", label: "Join Google Meet meeting", hosts: ["meet.google.com"] },
-  { brand: "zoom", label: "Join Zoom meeting", hosts: ["zoom.us"] },
+  { brand: "zoom", label: "Join Zoom meeting", hosts: ["zoom.us", "zoom.com"] },
   { brand: "facetime", label: "Join FaceTime call", hosts: ["facetime.apple.com"] },
   {
     brand: "teams",

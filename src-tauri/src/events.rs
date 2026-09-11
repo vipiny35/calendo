@@ -95,6 +95,205 @@ pub(crate) const CALENDAR_PRIVACY_URLS: &[&str] = &[
     "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars",
 ];
 
+/// Hosts recognised as a joinable meeting. Keep in step with `meetings.ts`.
+const MEETING_HOSTS: &[&str] = &[
+    "meet.google.com",
+    "zoom.us",
+    "zoom.com",
+    "facetime.apple.com",
+    "teams.microsoft.com",
+    "teams.live.com",
+    "webex.com",
+    "jit.si",
+    "jitsi.org",
+    "gotomeeting.com",
+    "goto.com",
+];
+
+fn host_of(url: &str) -> Option<String> {
+    let rest = url.split_once("://")?.1;
+    let host = rest.split(['/', '?', '#']).next()?.trim();
+    let host = host.split('@').next_back()?.trim();
+    if host.is_empty() {
+        return None;
+    }
+    Some(host.trim_end_matches('.').to_ascii_lowercase())
+}
+
+fn serves_host(host: &str, domain: &str) -> bool {
+    host == domain || host.ends_with(&format!(".{domain}"))
+}
+
+fn is_meeting_url(url: &str) -> bool {
+    host_of(url).is_some_and(|host| {
+        MEETING_HOSTS
+            .iter()
+            .any(|domain| serves_host(&host, domain))
+    })
+}
+
+fn from_hex(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn percent_decode(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            if let (Some(high), Some(low)) =
+                (from_hex(bytes[index + 1]), from_hex(bytes[index + 2]))
+            {
+                out.push(high * 16 + low);
+                index += 3;
+                continue;
+            }
+        }
+        out.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn query_param(url: &str, name: &str) -> Option<String> {
+    let query = url.split_once('?')?.1;
+    for pair in query.split('&') {
+        let (key, value) = pair.split_once('=')?;
+        if key == name {
+            return Some(percent_decode(value));
+        }
+    }
+    None
+}
+
+/// Google Calendar wraps the real join link in a redirect.
+fn unwrap_redirect(url: &str) -> String {
+    let host = host_of(url).unwrap_or_default();
+    if (serves_host(&host, "google.com") || serves_host(&host, "googleusercontent.com"))
+        && url.contains("/url?")
+    {
+        if let Some(target) = query_param(url, "q") {
+            if target.starts_with("http://") || target.starts_with("https://") {
+                return target;
+            }
+        }
+    }
+    url.to_string()
+}
+
+fn decode_entities(url: &str) -> String {
+    url.replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+}
+
+fn url_end(slice: &str) -> usize {
+    let mut end = 0;
+    for (index, character) in slice.char_indices() {
+        if character.is_whitespace()
+            || matches!(
+                character,
+                '"' | '\'' | '<' | '>' | ')' | ']' | '`' | '{' | '}'
+            )
+        {
+            break;
+        }
+        end = index + character.len_utf8();
+    }
+    end
+}
+
+fn take_http_url(input: &str, start: usize) -> String {
+    let mut url = decode_entities(&input[start..start + url_end(&input[start..])]);
+    while url.ends_with(['.', ',', ';', ':', '!', '?']) {
+        url.pop();
+    }
+    unwrap_redirect(&url)
+}
+
+/// http(s) URLs anywhere in the text, not only as whitespace-delimited tokens.
+/// Zoom invites from Google Calendar and Outlook put the join link in an href.
+fn urls_in(value: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    let lower = value.to_ascii_lowercase();
+    let mut cursor = 0;
+    while cursor < value.len() {
+        let rest = &lower[cursor..];
+        let https = rest.find("https://");
+        let http = rest.find("http://");
+        let relative = match (https, http) {
+            (Some(https), Some(http)) => https.min(http),
+            (Some(https), None) => https,
+            (None, Some(http)) => http,
+            (None, None) => break,
+        };
+        let start = cursor + relative;
+        let raw_end = url_end(&value[start..]).max(1);
+        let url = take_http_url(value, start);
+        cursor = start + raw_end;
+        if url.starts_with("http://") || url.starts_with("https://") {
+            urls.push(url);
+        }
+    }
+    urls
+}
+
+fn zoommtg_to_https(value: &str) -> Option<String> {
+    let lower = value.to_ascii_lowercase();
+    let start = lower.find("zoommtg://")?;
+    let rest = &value[start + "zoommtg://".len()..];
+    let url = take_http_url(&format!("https://{rest}"), 0);
+    let host = host_of(&url)?;
+    if !serves_host(&host, "zoom.us") && !serves_host(&host, "zoom.com") {
+        return None;
+    }
+    let confno = query_param(&url, "confno")?;
+    if confno.is_empty() {
+        return None;
+    }
+    let mut join = format!("https://{host}/j/{confno}");
+    if let Some(pwd) = query_param(&url, "pwd") {
+        if !pwd.is_empty() {
+            join.push_str(&format!("?pwd={pwd}"));
+        }
+    }
+    Some(join)
+}
+
+/// Pull a joinable http(s) URL out of an event's URL, location, and notes.
+/// Meeting hosts win when several URLs are present, so a Google Calendar
+/// wrapper or a company website in `URL` does not hide a Zoom link in notes.
+pub(crate) fn extract_join_url(
+    event_url: Option<&str>,
+    location: Option<&str>,
+    notes: Option<&str>,
+) -> Option<String> {
+    let mut first_any = None;
+    let mut first_meeting = None;
+    for blob in [event_url, location, notes].into_iter().flatten() {
+        if first_meeting.is_none() {
+            if let Some(zoom) = zoommtg_to_https(blob) {
+                first_meeting = Some(zoom);
+            }
+        }
+        for url in urls_in(blob) {
+            if first_any.is_none() {
+                first_any = Some(url.clone());
+            }
+            if first_meeting.is_none() && is_meeting_url(&url) {
+                first_meeting = Some(url);
+            }
+        }
+    }
+    first_meeting.or(first_any)
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
     use super::{
@@ -200,19 +399,21 @@ mod macos {
         reply: impl FnOnce(Result<bool, String>) + Send + 'static,
     ) {
         let reply = Mutex::new(Some(reply));
-        let completion = RcBlock::new(move |granted: Bool, error: *mut objc2_foundation::NSError| {
-            let result = if let Some(error) = unsafe { error.as_ref() } {
-                Err(error.localizedDescription().to_string())
-            } else {
-                Ok(granted.as_bool())
-            };
-            if matches!(result, Ok(true)) {
-                mark_granted();
-            }
-            if let Some(reply) = reply.lock().ok().and_then(|mut slot| slot.take()) {
-                reply(result);
-            }
-        });
+        let completion = RcBlock::new(
+            move |granted: Bool, error: *mut objc2_foundation::NSError| {
+                let result = if let Some(error) = unsafe { error.as_ref() } {
+                    Err(error.localizedDescription().to_string())
+                } else {
+                    Ok(granted.as_bool())
+                };
+                if matches!(result, Ok(true)) {
+                    mark_granted();
+                }
+                if let Some(reply) = reply.lock().ok().and_then(|mut slot| slot.take()) {
+                    reply(result);
+                }
+            },
+        );
         unsafe {
             #[allow(deprecated)]
             if available!(macos = 14.0) {
@@ -261,18 +462,6 @@ mod macos {
 
     fn ns_string(value: &NSString) -> String {
         value.to_string()
-    }
-
-    fn first_url(value: &str) -> Option<String> {
-        value
-            .split_whitespace()
-            .map(|token| {
-                token.trim_matches(|character: char| {
-                    matches!(character, '(' | ')' | '[' | ']' | '<' | '>' | ',' | ';')
-                })
-            })
-            .find(|token| token.starts_with("https://") || token.starts_with("http://"))
-            .map(str::to_owned)
     }
 
     /// The user's own answer to the invitation, read from the attendee list.
@@ -335,11 +524,11 @@ mod macos {
                     Some(value) => value.absoluteString().map(|value| ns_string(&value)),
                     None => None,
                 };
-                let join_url = event_url
-                    .as_deref()
-                    .and_then(first_url)
-                    .or_else(|| location.as_deref().and_then(first_url))
-                    .or_else(|| notes.as_deref().and_then(first_url));
+                let join_url = super::extract_join_url(
+                    event_url.as_deref(),
+                    location.as_deref(),
+                    notes.as_deref(),
+                );
                 let raw_calendar: Option<Retained<EKCalendar>> = unsafe { event.calendar() };
                 let calendar: Option<String> = raw_calendar.map(|value| {
                     let title = unsafe { value.title() };
@@ -489,8 +678,8 @@ pub fn open_meeting(url: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        access_action, access_granted, can_fetch_events, event_show_url, response_for,
-        AccessAction, Response, CALENDAR_PRIVACY_URLS,
+        access_action, access_granted, can_fetch_events, event_show_url, extract_join_url,
+        response_for, AccessAction, Response, CALENDAR_PRIVACY_URLS,
     };
 
     #[test]
@@ -552,6 +741,84 @@ mod tests {
         assert_eq!(response_for(4, true), Response::Tentative);
         assert_eq!(response_for(1, true), Response::Pending);
         assert_eq!(response_for(0, true), Response::Pending);
+    }
+
+    #[test]
+    fn a_bare_zoom_url_in_notes_is_enough() {
+        assert_eq!(
+            extract_join_url(
+                None,
+                None,
+                Some("Join Zoom Meeting\nhttps://acme.zoom.us/j/123")
+            ),
+            Some("https://acme.zoom.us/j/123".into())
+        );
+    }
+
+    #[test]
+    fn html_notes_still_yield_a_zoom_join_link() {
+        let notes = concat!(
+            "<html><body>Join Zoom Meeting<br>",
+            "<a href=\"https://us02web.zoom.us/j/8301234567?pwd=AbCd\">",
+            "https://us02web.zoom.us/j/8301234567?pwd=AbCd</a>",
+            "</body></html>",
+        );
+        assert_eq!(
+            extract_join_url(None, Some("Zoom"), Some(notes)),
+            Some("https://us02web.zoom.us/j/8301234567?pwd=AbCd".into())
+        );
+    }
+
+    #[test]
+    fn a_quoted_url_still_counts() {
+        assert_eq!(
+            extract_join_url(None, None, Some("dial in: \"https://zoom.us/j/99\" thanks")),
+            Some("https://zoom.us/j/99".into())
+        );
+    }
+
+    #[test]
+    fn a_meeting_link_wins_over_a_generic_event_url() {
+        assert_eq!(
+            extract_join_url(
+                Some("https://calendar.google.com/calendar/event?eid=abc"),
+                None,
+                Some("Join: https://meet.google.com/abc-defg-hij"),
+            ),
+            Some("https://meet.google.com/abc-defg-hij".into())
+        );
+    }
+
+    #[test]
+    fn google_redirects_unwrap_to_the_zoom_link() {
+        assert_eq!(
+            extract_join_url(
+                None,
+                None,
+                Some("https://www.google.com/url?q=https://zoom.us/j/123%3Fpwd%3Dsecret&sa=D"),
+            ),
+            Some("https://zoom.us/j/123?pwd=secret".into())
+        );
+    }
+
+    #[test]
+    fn zoommtg_links_become_https_join_urls() {
+        assert_eq!(
+            extract_join_url(
+                Some("zoommtg://zoom.us/join?confno=123456789&pwd=abc"),
+                None,
+                None,
+            ),
+            Some("https://zoom.us/j/123456789?pwd=abc".into())
+        );
+    }
+
+    #[test]
+    fn zoom_com_hosts_count_as_zoom() {
+        assert_eq!(
+            extract_join_url(None, Some("https://company.zoom.com/j/55"), None),
+            Some("https://company.zoom.com/j/55".into())
+        );
     }
 
     #[cfg(target_os = "macos")]

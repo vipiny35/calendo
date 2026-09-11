@@ -74,16 +74,7 @@ function detailRow(icon: Element | null, text: string, onClick?: () => void): HT
   return row;
 }
 
-function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
-  const nodes: HTMLElement[] = [];
-  const status = eventStatus(event, now);
-  const heading = status.timing !== "ongoing"
-    ? `Upcoming ${status.label}`
-    : status.label === "now"
-      ? "Happening now"
-      : `Happening now, ${status.label}`;
-  nodes.push(sectionLabel(heading));
-
+function eventDetails(event: UpcomingEvent, includeLocation = false): HTMLElement | null {
   const details = document.createElement("div");
   details.className = "detail";
   if (event.joinUrl) {
@@ -94,14 +85,26 @@ function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
       void api.hideEvents();
     }));
   }
-  if (event.location && !event.location.startsWith("http")) {
+  if (includeLocation && event.location && !event.location.startsWith("http")) {
     details.append(detailRow(lucideIcon(MapPin, 15), event.location));
   }
+  return details.childElementCount ? details : null;
+}
 
+function featuredEvent(event: UpcomingEvent, now: number): HTMLElement[] {
+  const nodes: HTMLElement[] = [];
+  const status = eventStatus(event, now);
+  const heading = status.timing !== "ongoing"
+    ? `Upcoming ${status.label}`
+    : status.label === "now"
+      ? "Happening now"
+      : `Happening now, ${status.label}`;
+  nodes.push(sectionLabel(heading));
   const row = eventRow(event);
   row.classList.add("featured");
   nodes.push(row);
-  if (details.childElementCount) nodes.push(details);
+  const details = eventDetails(event, true);
+  if (details) nodes.push(details);
   return nodes;
 }
 
@@ -128,6 +131,8 @@ async function load(): Promise<void> {
       const key = date.toDateString();
       if (key !== currentDay) { currentDay = key; nodes.push(sectionLabel(dayLabel(date))); }
       nodes.push(eventRow(event));
+      const details = eventDetails(event);
+      if (details) nodes.push(details);
     }
     list.replaceChildren(...nodes);
     syncHeight();

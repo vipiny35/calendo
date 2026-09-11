@@ -5,6 +5,7 @@ describe("meeting links", () => {
   it("names the services it knows", () => {
     expect(meetingBrand("https://meet.google.com/abc-defg-hij").brand).toBe("meet");
     expect(meetingBrand("https://acme.zoom.us/j/123").brand).toBe("zoom");
+    expect(meetingBrand("https://company.zoom.com/j/123").brand).toBe("zoom");
     expect(meetingBrand("https://facetime.apple.com/join#v=1,p=x").brand).toBe("facetime");
     expect(meetingBrand("https://teams.microsoft.com/l/meetup-join/x").brand).toBe("teams");
     expect(meetingBrand("https://acme.webex.com/meet/x").brand).toBe("webex");
