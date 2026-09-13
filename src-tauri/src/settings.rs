@@ -100,7 +100,7 @@ impl AppSettings {
         if !matches!(self.theme.as_str(), "system" | "light" | "dark") {
             self.theme = base.theme.clone();
         }
-        if !matches!(self.upcoming_horizon_hours, 1 | 2 | 4 | 6 | 8) {
+        if !matches!(self.upcoming_horizon_hours, 1 | 2 | 4 | 6 | 8 | 12 | 24 | 48) {
             self.upcoming_horizon_hours = base.upcoming_horizon_hours;
         }
         let mut days: Vec<u8> = self
@@ -268,7 +268,13 @@ mod tests {
         input.upcoming_horizon_hours = 2;
         assert_eq!(input.clone().normalize(&base).upcoming_horizon_hours, 2);
         input.upcoming_horizon_hours = 3;
-        assert_eq!(input.normalize(&base).upcoming_horizon_hours, 6);
+        assert_eq!(input.clone().normalize(&base).upcoming_horizon_hours, 6);
+        input.upcoming_horizon_hours = 12;
+        assert_eq!(input.clone().normalize(&base).upcoming_horizon_hours, 12);
+        input.upcoming_horizon_hours = 24;
+        assert_eq!(input.clone().normalize(&base).upcoming_horizon_hours, 24);
+        input.upcoming_horizon_hours = 48;
+        assert_eq!(input.normalize(&base).upcoming_horizon_hours, 48);
     }
 
     #[test]

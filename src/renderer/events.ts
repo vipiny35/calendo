@@ -53,7 +53,8 @@ function eventRow(event: UpcomingEvent): HTMLElement {
   if (event.response === "declined") row.classList.add("declined");
   const title = document.createElement("span");
   title.className = "title";
-  title.textContent = `${timeFormat.format(new Date(event.startAt))} · ${event.title}`;
+  const when = event.allDay ? "All day" : timeFormat.format(new Date(event.startAt));
+  title.textContent = `${when} · ${event.title}`;
   const response = RESPONSE_LABEL[event.response];
   row.title = response ? `${title.textContent} — ${response}` : title.textContent;
   row.append(dot, title);

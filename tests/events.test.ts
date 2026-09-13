@@ -18,6 +18,8 @@ const event: UpcomingEvent = {
   location: null,
   joinUrl: null,
   response: "accepted",
+  kind: "event",
+  allDay: false,
 };
 
 describe("event status", () => {
@@ -95,9 +97,46 @@ describe("upcoming look-ahead", () => {
   it("names the empty list from the window", () => {
     expect(upcomingHorizonEmpty(1)).toBe("Nothing in the next hour.");
     expect(upcomingHorizonEmpty(6)).toBe("Nothing in the next 6 hours.");
+    expect(upcomingHorizonEmpty(12)).toBe("Nothing in the next 12 hours.");
+    expect(upcomingHorizonEmpty(24)).toBe("Nothing in the rest of today.");
+    expect(upcomingHorizonEmpty(48)).toBe("Nothing in the next two days.");
+  });
+
+  it("treats one day as through midnight tonight", () => {
+    const now = new Date(2026, 8, 9, 22, 0).getTime();
+    const end = upcomingHorizonEnd(now, 24);
+    const boundary = new Date(end);
+    expect(boundary.getFullYear()).toBe(2026);
+    expect(boundary.getMonth()).toBe(8);
+    expect(boundary.getDate()).toBe(10);
+    expect(boundary.getHours()).toBe(0);
+  });
+
+  it("treats two days as through the end of tomorrow, not 48 clock hours", () => {
+    const now = new Date(2026, 8, 9, 22, 0).getTime();
+    const end = upcomingHorizonEnd(now, 48);
+    const boundary = new Date(end);
+    expect(boundary.getFullYear()).toBe(2026);
+    expect(boundary.getMonth()).toBe(8);
+    expect(boundary.getDate()).toBe(11);
+    expect(boundary.getHours()).toBe(0);
+    expect(end - now).toBeLessThan(48 * 3_600_000);
+  });
+
+  it("keeps an all-day reminder on its due day", () => {
+    const reminder = {
+      ...event,
+      kind: "reminder" as const,
+      allDay: true,
+      startAt: Date.UTC(2026, 8, 9, 0, 0),
+      endAt: Date.UTC(2026, 8, 10, 0, 0),
+    };
+    expect(eventInUpcomingHorizon(reminder, Date.UTC(2026, 8, 9, 15, 0), 48)).toBe(true);
+    expect(eventTimeRange(reminder, "en-US")).toBe("All day");
   });
 
   it("ends the fetch window after the chosen hours", () => {
     expect(upcomingHorizonEnd(now, 4) - now).toBe(4 * 3_600_000);
+    expect(upcomingHorizonEnd(now, 12) - now).toBe(12 * 3_600_000);
   });
 });

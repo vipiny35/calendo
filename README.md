@@ -21,9 +21,12 @@ Calendo opens at login.
 Optional upcoming-event awareness reads macOS Calendar and adds a second menu
 bar item: a countdown to the next event, which reads `now` for the first ten
 minutes of one in progress, and a popover listing events in the next few hours
-(1, 2, 4, 6, or 8, from Settings). Settings also chooses which calendars appear
-in that list; every calendar is shown until you hide some. The popover grows to
-its content rather than scrolling. Each row
+(1, 2, 4, 6, 8, or 12 hours, the rest of today, or the next two days, from
+Settings → Events). That tab also
+chooses which calendars and reminder lists appear in that list; every source is
+shown until you hide some. Scheduled reminders from Reminders.app sit alongside
+events in the same popover, the way Calendar.app draws them. The popover grows to its content
+rather than scrolling. Each row
 marks how you answered the invitation — solid when accepted, hatched for maybe,
 dashed while unanswered, struck through when declined — and opens the event in
 whichever app handles `ical://`, usually Calendar. An event carrying a web link

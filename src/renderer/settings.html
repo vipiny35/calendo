@@ -36,6 +36,26 @@
         <button
           type="button"
           role="tab"
+          id="tab-calendar"
+          aria-controls="panel-calendar"
+          aria-selected="false"
+          data-tab="calendar"
+        >
+          Calendar
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-events"
+          aria-controls="panel-events"
+          aria-selected="false"
+          data-tab="events"
+        >
+          Events
+        </button>
+        <button
+          type="button"
+          role="tab"
           id="tab-about"
           aria-controls="panel-about"
           aria-selected="false"
@@ -57,7 +77,7 @@
               <div class="copy">
                 <label for="login">Launch at login</label>
               </div>
-              <input id="login" name="launchAtLogin" type="checkbox" />
+              <input id="login" name="launchAtLogin" type="checkbox" switch />
             </div>
             <div class="row">
               <div class="copy">
@@ -70,7 +90,7 @@
                   id="beep-preview"
                   aria-label="Preview beep"
                 ></button>
-                <input id="beep" name="beepOnTheHour" type="checkbox" />
+                <input id="beep" name="beepOnTheHour" type="checkbox" switch />
               </div>
             </div>
             <div class="row">
@@ -78,39 +98,7 @@
                 <label for="auto-update">Install updates automatically</label>
                 <p>Download a signed release and restart when one is ready.</p>
               </div>
-              <input id="auto-update" name="autoUpdate" type="checkbox" />
-            </div>
-            <div class="row">
-              <label for="week-start">First day of the week</label>
-              <select id="week-start" name="weekStartsOn"></select>
-            </div>
-          </div>
-          <div class="group">
-            <h2 id="calendar-events-heading">Calendar events</h2>
-            <div class="card">
-              <div class="row">
-                <label for="show-upcoming">Show upcoming event in menu bar</label>
-                <input id="show-upcoming" name="showUpcomingEvent" type="checkbox" />
-              </div>
-              <div class="row" id="upcoming-horizon-row">
-                <div class="copy">
-                  <label for="upcoming-horizon">Show events within</label>
-                  <p>The countdown and list only cover this window.</p>
-                </div>
-                <select id="upcoming-horizon" name="upcomingHorizonHours"></select>
-              </div>
-              <p class="calendar-access-status" id="calendar-access-status" aria-live="polite" hidden></p>
-              <div class="row" id="calendar-access-row">
-                <label for="calendar-access">Calendar access</label>
-                <button type="button" class="action" id="calendar-access">Allow Access…</button>
-              </div>
-              <div
-                class="calendar-sources"
-                id="calendar-sources"
-                hidden
-                role="group"
-                aria-labelledby="calendar-sources-label"
-              ></div>
+              <input id="auto-update" name="autoUpdate" type="checkbox" switch />
             </div>
           </div>
         </section>
@@ -133,35 +121,11 @@
               ></div>
               <div class="row">
                 <label for="show-weekday">Show day of week</label>
-                <input id="show-weekday" name="showWeekday" type="checkbox" />
+                <input id="show-weekday" name="showWeekday" type="checkbox" switch />
               </div>
               <div class="row">
                 <label for="show-month">Show month</label>
-                <input id="show-month" name="showMonth" type="checkbox" />
-              </div>
-            </div>
-          </div>
-
-          <div class="group">
-            <h2 id="calendar-heading">Calendar</h2>
-            <div class="card">
-              <div class="row">
-                <div class="copy">
-                  <label for="week-numbers">Week numbers</label>
-                  <p>ISO week numbers along the left edge of the month.</p>
-                </div>
-                <input id="week-numbers" name="showWeekNumbers" type="checkbox" />
-              </div>
-              <div class="row highlight-row">
-                <div class="copy">
-                  <label id="highlight-label">Highlight</label>
-                </div>
-                <div
-                  class="weekday-picker"
-                  id="highlight-days"
-                  role="group"
-                  aria-labelledby="highlight-label"
-                ></div>
+                <input id="show-month" name="showMonth" type="checkbox" switch />
               </div>
             </div>
           </div>
@@ -183,35 +147,152 @@
 
         <section
           class="panel"
+          id="panel-calendar"
+          role="tabpanel"
+          aria-labelledby="tab-calendar"
+          hidden
+        >
+          <div class="group">
+            <h2 id="calendar-heading">Month</h2>
+            <div class="card">
+              <div class="row">
+                <label for="week-start">First day of the week</label>
+                <select id="week-start" name="weekStartsOn"></select>
+              </div>
+              <div class="row">
+                <div class="copy">
+                  <label for="week-numbers">Week numbers</label>
+                  <p>ISO week numbers along the left edge of the month.</p>
+                </div>
+                <input id="week-numbers" name="showWeekNumbers" type="checkbox" switch />
+              </div>
+              <div class="row highlight-row">
+                <div class="copy">
+                  <label id="highlight-label">Highlight</label>
+                </div>
+                <div
+                  class="weekday-picker"
+                  id="highlight-days"
+                  role="group"
+                  aria-labelledby="highlight-label"
+                ></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="panel"
+          id="panel-events"
+          role="tabpanel"
+          aria-labelledby="tab-events"
+          hidden
+        >
+          <div class="group">
+            <h2 id="upcoming-heading">Upcoming</h2>
+            <div class="card">
+              <div class="row">
+                <div class="copy">
+                  <label for="show-upcoming">Show upcoming in menu bar</label>
+                  <p>Calendar events and scheduled reminders share one list.</p>
+                </div>
+                <input id="show-upcoming" name="showUpcomingEvent" type="checkbox" switch />
+              </div>
+              <div class="row" id="upcoming-horizon-row">
+                <div class="copy">
+                  <label for="upcoming-horizon">Show events within</label>
+                  <p>Hours, the rest of today, or through tomorrow.</p>
+                </div>
+                <select id="upcoming-horizon" name="upcomingHorizonHours"></select>
+              </div>
+            </div>
+          </div>
+          <div class="group">
+            <h2 id="calendars-heading">Calendars</h2>
+            <div class="card">
+              <div class="row" id="calendar-access-row">
+                <div class="copy">
+                  <label for="calendar-access">Calendar access</label>
+                  <p>System Settings → Privacy &amp; Security → Calendars</p>
+                  <p id="calendar-access-status" aria-live="polite" hidden></p>
+                </div>
+                <button type="button" class="action" id="calendar-access">Allow Access…</button>
+              </div>
+              <div
+                class="calendar-sources"
+                id="calendar-sources"
+                hidden
+                role="group"
+                aria-labelledby="calendar-sources-label"
+              ></div>
+            </div>
+          </div>
+          <div class="group">
+            <h2 id="reminders-heading">Reminders</h2>
+            <div class="card">
+              <div class="row" id="reminders-access-row" hidden>
+                <div class="copy">
+                  <label for="reminders-access">Reminders access</label>
+                  <p>System Settings → Privacy &amp; Security → Reminders</p>
+                </div>
+                <button type="button" class="action" id="reminders-access">Allow Access…</button>
+              </div>
+              <div
+                class="calendar-sources"
+                id="reminder-sources"
+                hidden
+                role="group"
+                aria-labelledby="reminder-sources-label"
+              ></div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="panel"
           id="panel-about"
           role="tabpanel"
           aria-labelledby="tab-about"
           hidden
         >
           <div class="about">
-            <img class="about-icon" src="icon.png" alt="Calendo app icon" />
-            <p class="about-name">Calendo</p>
-            <p class="about-version" id="version">Calendo</p>
-            <p class="about-author">Created by Vipin Yadav</p>
-            <a
-              class="about-link"
-              href="https://vipinyadav.com"
-              target="_blank"
-              rel="noreferrer"
-            >
-              vipinyadav.com
-            </a>
-            <button type="button" class="link" id="open-repository">
-              github.com/vipiny35/calendo
-            </button>
-            <p class="about-copy">
-              A month calendar in the macOS menu bar. Nothing leaves this Mac.
-            </p>
-            <button type="button" class="action" id="check-updates">Check for Updates</button>
-            <button type="button" class="action" id="install-update" hidden>
-              Update and Restart
-            </button>
-            <p class="about-version" id="update-status" aria-live="polite"></p>
+            <div class="about-identity">
+              <img class="about-icon" src="icon.png" alt="Calendo app icon" />
+              <div class="about-intro">
+                <p class="about-name">Calendo</p>
+                <p class="about-version" id="version">Calendo</p>
+                <p class="about-copy">
+                  A month calendar in the macOS menu bar. Nothing leaves this Mac.
+                </p>
+              </div>
+            </div>
+            <div class="about-links" role="group" aria-label="Calendo online">
+              <button type="button" id="open-repository">
+                <span>Contribute</span>
+                <span class="about-dest">github.com/vipiny35/calendo</span>
+              </button>
+              <button type="button" id="open-profile">
+                <span>Follow</span>
+                <span class="about-dest">x.com/vip_iny</span>
+              </button>
+              <button type="button" id="open-donate">
+                <span>Donate</span>
+                <span class="about-dest">buymeacoffee.com/vip_iny</span>
+              </button>
+            </div>
+            <div class="about-foot">
+              <div class="about-updates">
+                <button type="button" class="action" id="check-updates">Check for Updates</button>
+                <button type="button" class="action" id="install-update" hidden>
+                  Update and Restart
+                </button>
+                <p class="about-version" id="update-status" aria-live="polite"></p>
+              </div>
+              <p class="about-legal">
+                © 2026 Calendo
+                <button type="button" class="link" id="open-site">vipinyadav.com</button>
+              </p>
+            </div>
           </div>
         </section>
       </form>

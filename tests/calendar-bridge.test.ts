@@ -26,3 +26,19 @@ it("waits for the native calendar permission result", async () => {
   await expect(api.requestCalendarAccess()).resolves.toBe(true);
   expect(invoke).toHaveBeenCalledWith("request_calendar_access", undefined);
 });
+
+it("opens an https address in the system browser", async () => {
+  const invoke = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("window", { __TAURI__: { core: { invoke } } });
+  await expect(api.openUrl("https://vipinyadav.com")).resolves.toBeUndefined();
+  expect(invoke).toHaveBeenCalledWith("join_meeting", { url: "https://vipinyadav.com" });
+});
+
+it("opens the Calendar and Reminders privacy panes", async () => {
+  const invoke = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("window", { __TAURI__: { core: { invoke } } });
+  await expect(api.openCalendarPrivacy()).resolves.toBeUndefined();
+  await expect(api.openRemindersPrivacy()).resolves.toBeUndefined();
+  expect(invoke).toHaveBeenCalledWith("open_calendar_privacy", undefined);
+  expect(invoke).toHaveBeenCalledWith("open_reminders_privacy", undefined);
+});

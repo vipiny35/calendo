@@ -1,9 +1,11 @@
 import {
   supportsDateParts,
+  calendarsOfKind,
   groupCalendarsBySource,
   HIGHLIGHT_DAYS,
   MENU_BAR_ICONS,
   UPCOMING_HORIZON_HOURS,
+  upcomingHorizonLabel,
   WEEK_STARTS,
   weekdayLetter,
   type AppSettings,
@@ -112,12 +114,18 @@ function startSettings(api: DesktopApi): void {
   const calendarAccess = requireElement<HTMLButtonElement>("calendar-access");
   const calendarAccessRow = requireElement<HTMLElement>("calendar-access-row");
   const calendarSources = requireElement<HTMLElement>("calendar-sources");
+  const reminderSources = requireElement<HTMLElement>("reminder-sources");
+  const remindersAccess = requireElement<HTMLButtonElement>("reminders-access");
+  const remindersAccessRow = requireElement<HTMLElement>("reminders-access-row");
   const beepPreview = requireElement<HTMLButtonElement>("beep-preview");
   const theme = requireElement<HTMLSelectElement>("theme");
   const version = requireElement<HTMLParagraphElement>("version");
   const checkUpdates = requireElement<HTMLButtonElement>("check-updates");
   const installUpdate = requireElement<HTMLButtonElement>("install-update");
   const openRepository = requireElement<HTMLButtonElement>("open-repository");
+  const openProfile = requireElement<HTMLButtonElement>("open-profile");
+  const openDonate = requireElement<HTMLButtonElement>("open-donate");
+  const openSite = requireElement<HTMLButtonElement>("open-site");
   const updateStatus = requireElement<HTMLParagraphElement>("update-status");
 
   buildIconStyles(iconStyles);
@@ -133,7 +141,7 @@ function startSettings(api: DesktopApi): void {
     upcomingHorizon,
     UPCOMING_HORIZON_HOURS.map((hours) => ({
       value: String(hours),
-      label: hours === 1 ? "1 hour" : `${hours} hours`,
+      label: upcomingHorizonLabel(hours),
     })),
   );
 
@@ -186,38 +194,44 @@ function startSettings(api: DesktopApi): void {
   };
 
   let hiddenCalendarIds: string[] = [];
-  let listedCalendars: CalendarInfo[] = [];
+
+  const sourceInputs = (): HTMLInputElement[] =>
+    Array.from(
+      document.querySelectorAll<HTMLInputElement>(
+        "#calendar-sources input[data-calendar-id], #reminder-sources input[data-calendar-id]",
+      ),
+    );
 
   const paintCalendarSelection = (hidden: readonly string[]): void => {
     const skipped = new Set(hidden);
-    for (const input of Array.from(
-      calendarSources.querySelectorAll<HTMLInputElement>("input[data-calendar-id]"),
-    )) {
+    for (const input of sourceInputs()) {
       input.checked = !skipped.has(input.dataset.calendarId ?? "");
     }
   };
 
-  const paintCalendarSources = (calendars: CalendarInfo[]): void => {
-    listedCalendars = calendars;
+  const paintSourceList = (
+    container: HTMLElement,
+    calendars: CalendarInfo[],
+    options: { empty: string; heading: string; headingId: string; idPrefix: string },
+  ): void => {
     if (!calendars.length) {
       const empty = document.createElement("p");
       empty.className = "calendar-sources-empty";
-      empty.id = "calendar-sources-label";
-      empty.textContent = "No calendars available.";
-      calendarSources.replaceChildren(empty);
+      empty.id = options.headingId;
+      empty.textContent = options.empty;
+      container.replaceChildren(empty);
       return;
     }
     const groups = groupCalendarsBySource(calendars);
-    const showGroups = groups.length > 1;
     const nodes: HTMLElement[] = [];
     const heading = document.createElement("p");
-    heading.className = showGroups ? "visually-hidden" : "calendar-source-label";
-    heading.id = "calendar-sources-label";
-    heading.textContent = "Calendars";
+    heading.className = "visually-hidden";
+    heading.id = options.headingId;
+    heading.textContent = options.heading;
     nodes.push(heading);
     let index = 0;
     for (const group of groups) {
-      if (showGroups) {
+      if (groups.length > 1) {
         const label = document.createElement("p");
         label.className = "calendar-source-label";
         label.textContent = group.source;
@@ -230,7 +244,7 @@ function startSettings(api: DesktopApi): void {
         copy.className = "copy";
         const name = document.createElement("label");
         name.className = "calendar-name";
-        name.htmlFor = `calendar-source-${index}`;
+        name.htmlFor = `${options.idPrefix}-${index}`;
         const swatch = document.createElement("span");
         swatch.className = "calendar-swatch";
         swatch.setAttribute("aria-hidden", "true");
@@ -239,7 +253,8 @@ function startSettings(api: DesktopApi): void {
         copy.append(name);
         const input = document.createElement("input");
         input.type = "checkbox";
-        input.id = `calendar-source-${index}`;
+        input.setAttribute("switch", "");
+        input.id = `${options.idPrefix}-${index}`;
         input.dataset.calendarId = calendar.id;
         input.checked = !hiddenCalendarIds.includes(calendar.id);
         row.append(copy, input);
@@ -247,24 +262,50 @@ function startSettings(api: DesktopApi): void {
         index += 1;
       }
     }
-    calendarSources.replaceChildren(...nodes);
+    container.replaceChildren(...nodes);
+  };
+
+  const hideSourceList = (container: HTMLElement): void => {
+    container.hidden = true;
+    container.replaceChildren();
   };
 
   const loadCalendarSources = async (granted: boolean): Promise<void> => {
     if (!granted) {
-      listedCalendars = [];
-      calendarSources.hidden = true;
-      calendarSources.replaceChildren();
+      hideSourceList(calendarSources);
       return;
     }
     try {
-      const calendars = await api.listCalendars();
-      paintCalendarSources(calendars);
+      const calendars = calendarsOfKind(await api.listCalendars(), "event");
+      paintSourceList(calendarSources, calendars, {
+        empty: "No calendars available.",
+        heading: "Calendars",
+        headingId: "calendar-sources-label",
+        idPrefix: "calendar-source",
+      });
       calendarSources.hidden = false;
     } catch {
-      listedCalendars = [];
-      calendarSources.hidden = true;
-      calendarSources.replaceChildren();
+      hideSourceList(calendarSources);
+    }
+  };
+
+  const loadReminderSources = async (granted: boolean): Promise<void> => {
+    remindersAccessRow.hidden = granted;
+    if (!granted) {
+      hideSourceList(reminderSources);
+      return;
+    }
+    try {
+      const calendars = calendarsOfKind(await api.listCalendars(), "reminder");
+      paintSourceList(reminderSources, calendars, {
+        empty: "No reminder lists available.",
+        heading: "Reminders",
+        headingId: "reminder-sources-label",
+        idPrefix: "reminder-source",
+      });
+      reminderSources.hidden = false;
+    } catch {
+      hideSourceList(reminderSources);
     }
   };
 
@@ -327,17 +368,30 @@ function startSettings(api: DesktopApi): void {
     void api.updateSettings(patch);
   });
 
-  calendarSources.addEventListener("change", (event) => {
+  const syncHiddenSources = (event: Event): void => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || !input.dataset.calendarId) return;
     event.stopPropagation();
-    if (!listedCalendars.length) return;
-    const hidden = Array.from(
-      calendarSources.querySelectorAll<HTMLInputElement>("input[data-calendar-id]"),
-    )
-      .filter((input) => !input.checked && input.dataset.calendarId)
-      .map((input) => input.dataset.calendarId as string);
-    hiddenCalendarIds = hidden;
-    void api.updateSettings({ hiddenCalendarIds: hidden });
-  });
+    const hidden = new Set(hiddenCalendarIds);
+    for (const source of sourceInputs()) {
+      const id = source.dataset.calendarId;
+      if (!id) continue;
+      if (source.checked) hidden.delete(id);
+      else hidden.add(id);
+    }
+    hiddenCalendarIds = [...hidden].sort();
+    void api.updateSettings({ hiddenCalendarIds });
+  };
+  calendarSources.addEventListener("change", syncHiddenSources);
+  reminderSources.addEventListener("change", syncHiddenSources);
+
+  const refreshRemindersAccess = async (): Promise<void> => {
+    try {
+      await loadReminderSources(await api.getRemindersAccess());
+    } catch {
+      await loadReminderSources(false);
+    }
+  };
 
   const refreshCalendarAccess = bindCalendarAccess(api, {
     status: calendarAccessStatus,
@@ -346,11 +400,26 @@ function startSettings(api: DesktopApi): void {
     toggle: showUpcoming,
     onGrantedChange: (granted) => {
       void loadCalendarSources(granted);
+      void refreshRemindersAccess();
     },
   });
-  window.addEventListener("focus", () => void refreshCalendarAccess());
+  remindersAccess.addEventListener("click", async () => {
+    remindersAccess.disabled = true;
+    try {
+      await api.openRemindersPrivacy();
+      await refreshRemindersAccess();
+    } finally {
+      remindersAccess.disabled = false;
+    }
+  });
+  window.addEventListener("focus", () => {
+    void refreshCalendarAccess();
+    void refreshRemindersAccess();
+  });
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) void refreshCalendarAccess();
+    if (document.hidden) return;
+    void refreshCalendarAccess();
+    void refreshRemindersAccess();
   });
 
   iconStyles.addEventListener("click", (event) => {
@@ -418,6 +487,11 @@ function startSettings(api: DesktopApi): void {
     });
   });
   openRepository.addEventListener("click", () => void api.openRepository());
+  openProfile.addEventListener("click", () => void api.openUrl("https://x.com/vip_iny"));
+  openDonate.addEventListener("click", () =>
+    void api.openUrl("https://buymeacoffee.com/vip_iny"),
+  );
+  openSite.addEventListener("click", () => void api.openUrl("https://vipinyadav.com"));
   api.onUpdateProgress(({ downloaded, total }) => {
     updateStatus.textContent = total
       ? `Downloading… ${Math.min(100, Math.round((downloaded / total) * 100))}%`

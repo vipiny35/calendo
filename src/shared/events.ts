@@ -1,3 +1,5 @@
+import { ONE_DAY_HORIZON, TWO_DAYS_HORIZON } from "./settings";
+
 /** How the user answered the invitation; "confirmed" means no invitation. */
 export type EventResponse =
   | "confirmed"
@@ -5,6 +7,8 @@ export type EventResponse =
   | "tentative"
   | "declined"
   | "pending";
+
+export type EventKind = "event" | "reminder";
 
 export type UpcomingEvent = {
   id: string;
@@ -15,9 +19,19 @@ export type UpcomingEvent = {
   location: string | null;
   joinUrl: string | null;
   response: EventResponse;
+  kind: EventKind;
+  allDay: boolean;
 };
 
 const HOUR_MS = 3_600_000;
+
+/** Local midnight that closes today. */
+export function endOfToday(now = new Date()): number {
+  const boundary = new Date(now);
+  boundary.setHours(0, 0, 0, 0);
+  boundary.setDate(boundary.getDate() + 1);
+  return boundary.getTime();
+}
 
 /** Local midnight that ends the "today and tomorrow" window. */
 export function endOfTomorrow(now = new Date()): number {
@@ -29,6 +43,8 @@ export function endOfTomorrow(now = new Date()): number {
 
 /** When the countdown and event-list look-ahead ends. */
 export function upcomingHorizonEnd(now: number, hours: number): number {
+  if (hours === ONE_DAY_HORIZON) return endOfToday(new Date(now));
+  if (hours === TWO_DAYS_HORIZON) return endOfTomorrow(new Date(now));
   return now + hours * HOUR_MS;
 }
 
@@ -47,6 +63,8 @@ export function eventInUpcomingHorizon(
 }
 
 export function upcomingHorizonEmpty(hours: number): string {
+  if (hours === ONE_DAY_HORIZON) return "Nothing in the rest of today.";
+  if (hours === TWO_DAYS_HORIZON) return "Nothing in the next two days.";
   return hours === 1
     ? "Nothing in the next hour."
     : `Nothing in the next ${hours} hours.`;
@@ -95,9 +113,10 @@ export function eventStatus(
 }
 
 export function eventTimeRange(
-  event: Pick<UpcomingEvent, "startAt" | "endAt">,
+  event: Pick<UpcomingEvent, "startAt" | "endAt" | "allDay">,
   locale?: string,
 ): string {
+  if (event.allDay) return "All day";
   const format = new Intl.DateTimeFormat(locale, {
     hour: "numeric",
     minute: "2-digit",

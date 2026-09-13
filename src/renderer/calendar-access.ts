@@ -4,7 +4,10 @@ const GRANT_WATCH_MS = [800, 1600, 3200, 6400];
 
 /** Always paint permission from the native result, including after Settings returns. */
 export function bindCalendarAccess(
-  api: Pick<DesktopApi, "getCalendarAccess" | "requestCalendarAccess">,
+  api: Pick<
+    DesktopApi,
+    "getCalendarAccess" | "requestCalendarAccess" | "openCalendarPrivacy"
+  >,
   elements: {
     status: Pick<HTMLElement, "hidden" | "textContent">;
     button: Pick<HTMLButtonElement, "disabled" | "addEventListener">;
@@ -19,10 +22,10 @@ export function bindCalendarAccess(
 
   const paint = (granted: boolean): void => {
     row.hidden = granted;
-    status.hidden = !toggle.checked;
-    status.textContent = granted
-      ? "Calendar access enabled."
-      : "Allow Calendar access in System Settings.";
+    if (granted) {
+      status.hidden = true;
+      status.textContent = "";
+    }
     onGrantedChange?.(granted);
   };
   const showError = (error: unknown): void => {
@@ -58,8 +61,6 @@ export function bindCalendarAccess(
     const started = ++revision;
     requesting = true;
     button.disabled = true;
-    status.hidden = false;
-    status.textContent = "Requesting Calendar access…";
     try {
       const granted = await api.requestCalendarAccess();
       if (started !== revision) return;
@@ -72,13 +73,25 @@ export function bindCalendarAccess(
       button.disabled = false;
     }
   };
-  button.addEventListener("click", () => void request());
+  const openPrivacy = async (): Promise<void> => {
+    if (requesting) return;
+    const started = ++revision;
+    requesting = true;
+    button.disabled = true;
+    try {
+      await api.openCalendarPrivacy();
+      if (started !== revision) return;
+      void watchForGrant(started);
+    } catch (error) {
+      if (started === revision) showError(error);
+    } finally {
+      requesting = false;
+      button.disabled = false;
+    }
+  };
+  button.addEventListener("click", () => void openPrivacy());
   toggle.addEventListener("change", () => {
     if (toggle.checked) void request();
-    else {
-      status.hidden = true;
-      status.textContent = "";
-    }
   });
   return refresh;
 }

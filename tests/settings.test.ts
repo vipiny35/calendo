@@ -3,11 +3,13 @@ import {
   DEFAULT_SETTINGS,
   MENU_BAR_ICONS,
   calendarIsVisible,
+  calendarsOfKind,
   groupCalendarsBySource,
   supportsDateParts,
   formatMenuBarDate,
   highlightedColumnRuns,
   menuBarLabel,
+  trayLabelKey,
   normalizeHiddenCalendarIds,
   normalizeSettings,
 } from "../src/shared/settings";
@@ -85,6 +87,15 @@ describe("normalizeSettings", () => {
     ]);
   });
 
+  it("keeps event calendars and reminder lists apart", () => {
+    const items = [
+      { id: "1", title: "Home", source: "iCloud", color: null },
+      { id: "5", title: "Groceries", source: "iCloud", color: null, kind: "reminder" as const },
+    ];
+    expect(calendarsOfKind(items, "event")).toEqual([items[0]]);
+    expect(calendarsOfKind(items, "reminder")).toEqual([items[1]]);
+  });
+
   it.each([0, 1, 2, 3, 4, 5, 6])("preserves weekday %i as the first day", (day) => {
     expect(normalizeSettings({ weekStartsOn: day }).weekStartsOn).toBe(day);
   });
@@ -102,6 +113,9 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings({}).upcomingHorizonHours).toBe(6);
     expect(normalizeSettings({ upcomingHorizonHours: 2 }).upcomingHorizonHours).toBe(2);
     expect(normalizeSettings({ upcomingHorizonHours: 3 }).upcomingHorizonHours).toBe(6);
+    expect(normalizeSettings({ upcomingHorizonHours: 12 }).upcomingHorizonHours).toBe(12);
+    expect(normalizeSettings({ upcomingHorizonHours: 24 }).upcomingHorizonHours).toBe(24);
+    expect(normalizeSettings({ upcomingHorizonHours: 48 }).upcomingHorizonHours).toBe(48);
   });
 
   it("migrates dim weekends off to no highlighted columns", () => {
@@ -180,6 +194,21 @@ describe("menu bar label", () => {
       menuBarLabel({ menuBarIcon: "framed", showWeekday: true, showMonth: true }, date, "en-US")
         .text,
     ).toBe("Tue 8 Sep");
+  });
+
+  it("redraws the framed glyph when weekday or month parts change", () => {
+    const day = trayLabelKey(
+      menuBarLabel({ menuBarIcon: "framed", showWeekday: false, showMonth: false }, date, "en-US"),
+    );
+    const withMonth = trayLabelKey(
+      menuBarLabel({ menuBarIcon: "framed", showWeekday: false, showMonth: true }, date, "en-US"),
+    );
+    const withWeekday = trayLabelKey(
+      menuBarLabel({ menuBarIcon: "framed", showWeekday: true, showMonth: false }, date, "en-US"),
+    );
+    expect(day).not.toBe(withMonth);
+    expect(day).not.toBe(withWeekday);
+    expect(withMonth).not.toBe(withWeekday);
   });
 
   it("drops the glyph for no-icon, and keeps a date in the title", () => {
