@@ -5,7 +5,7 @@ import { meetingBrand } from "../shared/meetings";
 import { meetingIcon } from "./brand-icons";
 import { markPopoverMaterial, popoverHeight } from "./popover-size";
 import { MapPin } from "lucide";
-import { DEFAULT_SETTINGS, type UpcomingHorizonHours } from "../shared/settings";
+import { DEFAULT_SETTINGS, type AppSettings } from "../shared/settings";
 
 const api = installTauriBridge();
 const list = document.getElementById("list")!;
@@ -53,7 +53,8 @@ function eventRow(event: UpcomingEvent): HTMLElement {
   if (event.response === "declined") row.classList.add("declined");
   const title = document.createElement("span");
   title.className = "title";
-  title.textContent = `${timeFormat.format(new Date(event.startAt))} · ${event.title}`;
+  const when = event.allDay ? "All day" : timeFormat.format(new Date(event.startAt));
+  title.textContent = `${when} · ${event.title}`;
   const response = RESPONSE_LABEL[event.response];
   row.title = response ? `${title.textContent} — ${response}` : title.textContent;
   row.append(dot, title);
@@ -149,13 +150,22 @@ async function load(): Promise<void> {
   }
 }
 void markPopoverMaterial(() => api.getPopoverMaterial());
-function applyHorizon(hours: UpcomingHorizonHours): void {
-  if (hours === horizonHours) return;
-  horizonHours = hours;
-  void load();
+let hiddenCalendarKey = DEFAULT_SETTINGS.hiddenCalendarIds.join("\0");
+
+function applyEventSettings(
+  settings: Pick<AppSettings, "upcomingHorizonHours"> &
+    Partial<Pick<AppSettings, "hiddenCalendarIds">>,
+): void {
+  const hiddenKey = (settings.hiddenCalendarIds ?? []).join("\0");
+  const hoursChanged = settings.upcomingHorizonHours !== horizonHours;
+  const hiddenChanged = hiddenKey !== hiddenCalendarKey;
+  horizonHours = settings.upcomingHorizonHours;
+  hiddenCalendarKey = hiddenKey;
+  if (hoursChanged || hiddenChanged) void load();
 }
-void api.getSettings().then((settings) => applyHorizon(settings.upcomingHorizonHours));
-api.onSettingsChanged((settings) => applyHorizon(settings.upcomingHorizonHours));
+
+void api.getSettings().then(applyEventSettings);
+api.onSettingsChanged(applyEventSettings);
 api.onEventsShown(() => void load());
 api.onClockTick(() => void load());
 void load();

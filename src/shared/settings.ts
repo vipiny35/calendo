@@ -2,8 +2,20 @@ export type WeekStartsOn = Weekday;
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export type Theme = "system" | "light" | "dark";
 export type MenuBarIconStyle = "filled" | "framed" | "calendar" | "none";
-export const UPCOMING_HORIZON_HOURS = [1, 2, 4, 6, 8] as const;
+/** Stored as 24 hours; the look-ahead actually runs through the end of today. */
+export const ONE_DAY_HORIZON = 24;
+/** Stored as 48 hours; the look-ahead actually runs through the end of tomorrow. */
+export const TWO_DAYS_HORIZON = 48;
+export const UPCOMING_HORIZON_HOURS = [
+  1, 2, 4, 6, 8, 12, ONE_DAY_HORIZON, TWO_DAYS_HORIZON,
+] as const;
 export type UpcomingHorizonHours = (typeof UPCOMING_HORIZON_HOURS)[number];
+
+export function upcomingHorizonLabel(hours: UpcomingHorizonHours): string {
+  if (hours === ONE_DAY_HORIZON) return "1 day";
+  if (hours === TWO_DAYS_HORIZON) return "2 days";
+  return hours === 1 ? "1 hour" : `${hours} hours`;
+}
 
 export type AppSettings = {
   menuBarIcon: MenuBarIconStyle;
@@ -16,8 +28,20 @@ export type AppSettings = {
   beepOnTheHour: boolean;
   showUpcomingEvent: boolean;
   upcomingHorizonHours: UpcomingHorizonHours;
+  /** EventKit identifiers the upcoming-event list should ignore. Empty shows every calendar. */
+  hiddenCalendarIds: string[];
   autoUpdate: boolean;
   theme: Theme;
+};
+
+export type CalendarKind = "event" | "reminder";
+
+export type CalendarInfo = {
+  id: string;
+  title: string;
+  source: string | null;
+  color: string | null;
+  kind?: CalendarKind;
 };
 
 export type MenuBarPart = "weekday" | "day" | "month";
@@ -95,6 +119,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   beepOnTheHour: false,
   showUpcomingEvent: false,
   upcomingHorizonHours: 6,
+  hiddenCalendarIds: [],
   autoUpdate: true,
   theme: "system",
 };
@@ -121,6 +146,48 @@ export function weekdayLetter(id: Weekday, locale?: string): string {
 export function normalizeHighlightWeekdays(value: unknown): Weekday[] {
   if (!Array.isArray(value)) return [...DEFAULT_HIGHLIGHT_WEEKDAYS];
   return [...new Set(value.filter(isWeekday))].sort((a, b) => a - b);
+}
+
+export function normalizeHiddenCalendarIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter((item): item is string => typeof item === "string" && item.length > 0),
+    ),
+  ].sort();
+}
+
+export function calendarIsVisible(
+  calendarId: string | null | undefined,
+  hidden: readonly string[],
+): boolean {
+  if (!calendarId) return true;
+  return !hidden.includes(calendarId);
+}
+
+export function calendarsOfKind(
+  calendars: readonly CalendarInfo[],
+  kind: CalendarKind,
+): CalendarInfo[] {
+  return calendars.filter((calendar) => (calendar.kind ?? "event") === kind);
+}
+
+/** Adjacent calendars from the same account, titles A–Z inside each group. */
+export function groupCalendarsBySource(
+  calendars: readonly CalendarInfo[],
+): { source: string; calendars: CalendarInfo[] }[] {
+  const groups = new Map<string, CalendarInfo[]>();
+  for (const calendar of [...calendars].sort((a, b) =>
+    a.title.localeCompare(b.title, "en", { sensitivity: "base" }),
+  )) {
+    const source = calendar.source?.trim() || "Other";
+    const list = groups.get(source) ?? [];
+    list.push(calendar);
+    groups.set(source, list);
+  }
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, "en", { sensitivity: "base" }))
+    .map(([source, items]) => ({ source, calendars: items }));
 }
 
 /**
@@ -207,6 +274,11 @@ export function formatMenuBarDate(
   return menuBarLabel(settings, date, locale).text ?? "";
 }
 
+/** Enough of the label to know the menu bar must be redrawn. */
+export function trayLabelKey(label: MenuBarLabel): string {
+  return `${label.text ?? ""}|${label.day ?? ""}|${label.style}`;
+}
+
 function migrateMenuBar(
   input: Record<string, unknown>,
 ): Pick<AppSettings, "menuBarIcon" | "showWeekday" | "showMonth"> {
@@ -266,6 +338,10 @@ export function normalizeSettings(raw: unknown): AppSettings {
     upcomingHorizonHours: HORIZON_HOURS.has(input.upcomingHorizonHours as number)
       ? (input.upcomingHorizonHours as UpcomingHorizonHours)
       : DEFAULT_SETTINGS.upcomingHorizonHours,
+    hiddenCalendarIds:
+      "hiddenCalendarIds" in input
+        ? normalizeHiddenCalendarIds(input.hiddenCalendarIds)
+        : [...DEFAULT_SETTINGS.hiddenCalendarIds],
     autoUpdate: asBoolean(input.autoUpdate, DEFAULT_SETTINGS.autoUpdate),
     theme: THEMES.has(theme as Theme) ? (theme as Theme) : DEFAULT_SETTINGS.theme,
   };

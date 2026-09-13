@@ -914,9 +914,18 @@ where
         .map_err(|error| error.to_string())?
 }
 
+fn hidden_calendar_ids(app: &AppHandle) -> Vec<String> {
+    app.state::<AppState>()
+        .settings
+        .lock()
+        .map(|store| store.value().hidden_calendar_ids)
+        .unwrap_or_default()
+}
+
 #[tauri::command]
 async fn get_upcoming_event(app: AppHandle) -> Result<Option<events::UpcomingEvent>, String> {
-    on_main_async(app, events::fetch_upcoming).await?
+    let hidden = hidden_calendar_ids(&app);
+    on_main_async(app, move || events::fetch_upcoming(&hidden)).await?
 }
 
 #[tauri::command]
@@ -925,7 +934,13 @@ async fn get_calendar_events(
     start_at: i64,
     end_at: i64,
 ) -> Result<Vec<events::UpcomingEvent>, String> {
-    on_main_async(app, move || events::fetch_range(start_at, end_at)).await?
+    let hidden = hidden_calendar_ids(&app);
+    on_main_async(app, move || events::fetch_range(start_at, end_at, &hidden)).await?
+}
+
+#[tauri::command]
+async fn list_calendars(app: AppHandle) -> Result<Vec<events::CalendarInfo>, String> {
+    on_main_async(app, events::list_calendars).await?
 }
 
 #[tauri::command]
@@ -945,6 +960,21 @@ async fn request_calendar_access(app: AppHandle) -> Result<bool, String> {
             .recv_timeout(Duration::from_secs(180))
             .map_err(|_| "Calendar access request timed out. Try again.".to_string())??;
         on_main(&waiting, move || events::finish_access_request(granted))?;
+        if granted {
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            waiting
+                .run_on_main_thread(move || {
+                    events::begin_reminders_access_request(move |result| {
+                        let _ = sender.send(result);
+                    });
+                })
+                .ok();
+            if let Ok(Ok(reminder_granted)) = receiver.recv_timeout(Duration::from_secs(180)) {
+                let _ = on_main(&waiting, move || {
+                    events::finish_reminders_access_request(reminder_granted)
+                });
+            }
+        }
         Ok(granted)
     })
     .await
@@ -954,6 +984,44 @@ async fn request_calendar_access(app: AppHandle) -> Result<bool, String> {
 #[tauri::command]
 async fn get_calendar_access(app: AppHandle) -> Result<bool, String> {
     on_main_async(app, events::has_access).await
+}
+
+#[tauri::command]
+async fn request_reminders_access(app: AppHandle) -> Result<bool, String> {
+    let _ = app.set_activation_policy(ActivationPolicy::Regular);
+    let waiting = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        waiting
+            .run_on_main_thread(move || {
+                events::begin_reminders_access_request(move |result| {
+                    let _ = sender.send(result);
+                });
+            })
+            .map_err(|error| error.to_string())?;
+        let granted = receiver
+            .recv_timeout(Duration::from_secs(180))
+            .map_err(|_| "Reminders access request timed out. Try again.".to_string())??;
+        on_main(&waiting, move || events::finish_reminders_access_request(granted))?;
+        Ok(granted)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn get_reminders_access(app: AppHandle) -> Result<bool, String> {
+    on_main_async(app, events::has_reminders_access).await
+}
+
+#[tauri::command]
+async fn open_calendar_privacy(app: AppHandle) -> Result<(), String> {
+    on_main_async(app, events::open_calendar_privacy).await?
+}
+
+#[tauri::command]
+async fn open_reminders_privacy(app: AppHandle) -> Result<(), String> {
+    on_main_async(app, events::open_reminders_privacy).await?
 }
 
 #[tauri::command]
@@ -1112,8 +1180,13 @@ pub fn run() {
             open_repository,
             get_upcoming_event,
             get_calendar_events,
+            list_calendars,
             request_calendar_access,
             get_calendar_access,
+            request_reminders_access,
+            get_reminders_access,
+            open_calendar_privacy,
+            open_reminders_privacy,
             join_meeting,
             open_event,
         ])

@@ -12,7 +12,7 @@ import {
   monthOutlinePath,
   occupancyFromWeeks,
 } from "../shared/month-outline";
-import { menuBarLabel, highlightedColumnRuns, type AppSettings } from "../shared/settings";
+import { menuBarLabel, highlightedColumnRuns, trayLabelKey, type AppSettings } from "../shared/settings";
 import { eventInUpcomingHorizon, eventStatus, eventTimeRange, type UpcomingEvent } from "../shared/events";
 import { lucideIcon } from "./icons";
 import { eventGlyphPng, framedGlyphPng } from "./tray-frame";
@@ -248,7 +248,7 @@ function startCalendar(api: DesktopApi): void {
     // stays as it reads when the popover is closed.
     const title = label.style === "none" ? label.text ?? "" : "";
     const trayStyle = label.style;
-    const signature = `${title}|${label.day ?? ""}|${trayStyle}`;
+    const signature = trayLabelKey(label);
     // A hair space keeps "2h 21m" from reading as one long number without
     // opening the full word space the menu bar font would otherwise give it.
     const eventTitle = status ? status.replace(/(\d+)([hm])/g, "$1\u200a$2") : null;

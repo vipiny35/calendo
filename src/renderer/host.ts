@@ -1,4 +1,4 @@
-import type { AppSettings } from "../shared/settings";
+import type { AppSettings, CalendarInfo } from "../shared/settings";
 import type { UpcomingEvent } from "../shared/events";
 
 /** An empty version means the running build is current. */
@@ -27,13 +27,19 @@ export type DesktopApi = {
   beep: () => Promise<void>;
   getUpcomingEvent: () => Promise<UpcomingEvent | null>;
   getCalendarEvents: (startAt: number, endAt: number) => Promise<UpcomingEvent[]>;
+  listCalendars: () => Promise<CalendarInfo[]>;
   requestCalendarAccess: () => Promise<boolean>;
   getCalendarAccess: () => Promise<boolean>;
+  requestRemindersAccess: () => Promise<boolean>;
+  getRemindersAccess: () => Promise<boolean>;
+  openCalendarPrivacy: () => Promise<void>;
+  openRemindersPrivacy: () => Promise<void>;
   joinMeeting: (url: string) => Promise<void>;
   openEvent: (id: string) => Promise<void>;
   checkForUpdates: () => Promise<UpdateOffer>;
   installUpdate: () => Promise<void>;
   openRepository: () => Promise<void>;
+  openUrl: (url: string) => Promise<void>;
   onUpdateProgress: (
     listener: (progress: { downloaded: number; total: number | null }) => void,
   ) => () => void;
@@ -95,13 +101,19 @@ export const api: DesktopApi = {
   getUpcomingEvent: () => invoke<UpcomingEvent | null>("get_upcoming_event"),
   getCalendarEvents: (startAt, endAt) =>
     invoke<UpcomingEvent[]>("get_calendar_events", { startAt, endAt }),
+  listCalendars: () => invoke<CalendarInfo[]>("list_calendars"),
   requestCalendarAccess: () => invoke<boolean>("request_calendar_access"),
   getCalendarAccess: () => invoke<boolean>("get_calendar_access"),
+  requestRemindersAccess: () => invoke<boolean>("request_reminders_access"),
+  getRemindersAccess: () => invoke<boolean>("get_reminders_access"),
+  openCalendarPrivacy: () => invoke<void>("open_calendar_privacy"),
+  openRemindersPrivacy: () => invoke<void>("open_reminders_privacy"),
   joinMeeting: (url) => invoke<void>("join_meeting", { url }),
   openEvent: (id) => invoke<void>("open_event", { id }),
   checkForUpdates: () => invoke<UpdateOffer>("check_for_updates"),
   installUpdate: () => invoke<void>("install_update"),
   openRepository: () => invoke<void>("open_repository"),
+  openUrl: (url) => invoke<void>("join_meeting", { url }),
   onUpdateProgress: (listener) =>
     subscribe<{ downloaded: number; total: number | null }>(
       "update-progress",

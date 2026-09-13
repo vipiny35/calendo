@@ -29,6 +29,11 @@ pub(crate) fn response_for(status: isize, is_attendee: bool) -> Response {
     }
 }
 
+#[allow(dead_code)]
+fn default_event_kind() -> String {
+    "event".into()
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpcomingEvent {
@@ -40,6 +45,28 @@ pub struct UpcomingEvent {
     pub location: Option<String>,
     pub join_url: Option<String>,
     pub response: Response,
+    #[serde(default = "default_event_kind")]
+    pub kind: String,
+    #[serde(default)]
+    pub all_day: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarInfo {
+    pub id: String,
+    pub title: String,
+    pub source: Option<String>,
+    pub color: Option<String>,
+    pub kind: String,
+}
+
+/// Missing identifiers stay visible so a calendar EventKit cannot name is not dropped.
+pub(crate) fn calendar_is_visible(calendar_id: Option<&str>, hidden: &[String]) -> bool {
+    match calendar_id {
+        None => true,
+        Some(id) => !hidden.iter().any(|item| item == id),
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,7 +103,7 @@ pub(crate) fn can_fetch_events(status: isize, granted_this_session: bool) -> boo
 /// Calendar apps claim `ical://ekevent`, so this reaches whichever one the
 /// user has set as default. Identifiers carry colons, which have to be
 /// escaped to stay inside one path segment.
-pub(crate) fn event_show_url(id: &str) -> String {
+fn percent_encode_path(id: &str) -> String {
     let mut escaped = String::with_capacity(id.len());
     for byte in id.bytes() {
         match byte {
@@ -86,13 +113,48 @@ pub(crate) fn event_show_url(id: &str) -> String {
             _ => escaped.push_str(&format!("%{byte:02X}")),
         }
     }
-    format!("ical://ekevent/{escaped}?method=show&options=more")
+    escaped
+}
+
+pub(crate) fn event_show_url(id: &str) -> String {
+    format!(
+        "ical://ekevent/{}?method=show&options=more",
+        percent_encode_path(id)
+    )
+}
+
+pub(crate) const REMINDER_ID_PREFIX: &str = "reminder:";
+
+pub(crate) fn reminder_show_url(id: &str) -> String {
+    format!(
+        "x-apple-reminderkit://REMCDReminder/{}",
+        percent_encode_path(id)
+    )
+}
+
+/// Date-only reminders occupy the due day. Timed ones get a short slot so they
+/// can sit in the same countdown as meetings.
+pub(crate) fn reminder_span(due_ms: i64, all_day: bool) -> (i64, i64) {
+    let length = if all_day {
+        24 * 60 * 60 * 1000
+    } else {
+        15 * 60 * 1000
+    };
+    (due_ms, due_ms.saturating_add(length))
 }
 
 pub(crate) const CALENDAR_PRIVACY_URLS: &[&str] = &[
+    "x-apple.systempreferences:com.apple.Settings.PrivacySecurity?Privacy_Calendars",
     "x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_Calendars",
     "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Calendars",
     "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars",
+];
+
+pub(crate) const REMINDER_PRIVACY_URLS: &[&str] = &[
+    "x-apple.systempreferences:com.apple.Settings.PrivacySecurity?Privacy_Reminders",
+    "x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_Reminders",
+    "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Reminders",
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders",
 ];
 
 /// Hosts recognised as a joinable meeting. Keep in step with `meetings.ts`.
@@ -297,24 +359,30 @@ pub(crate) fn extract_join_url(
 #[cfg(target_os = "macos")]
 mod macos {
     use super::{
-        access_action, access_granted, can_fetch_events, event_show_url, response_for,
-        AccessAction, Response, UpcomingEvent, CALENDAR_PRIVACY_URLS,
+        access_action, access_granted, can_fetch_events, event_show_url, reminder_show_url,
+        response_for, AccessAction, Response, UpcomingEvent, CALENDAR_PRIVACY_URLS,
+        REMINDER_PRIVACY_URLS,
     };
     use block2::RcBlock;
     use objc2::rc::{autoreleasepool, Retained};
     use objc2::runtime::Bool;
     use objc2::{available, AnyThread};
-    use objc2_app_kit::{NSApplication, NSWorkspace};
-    use objc2_event_kit::{EKCalendar, EKEntityType, EKEventStore};
-    use objc2_foundation::{MainThreadMarker, NSDate, NSString, NSURL};
+    use objc2_app_kit::{NSApplication, NSColorSpace, NSWorkspace};
+    use objc2_event_kit::{EKCalendar, EKEntityType, EKEventStore, EKReminder, EKSource};
+    use objc2_foundation::{
+        MainThreadMarker, NSCalendar, NSDate, NSDateComponentUndefined, NSDateComponents, NSRunLoop,
+        NSString, NSURL,
+    };
     use std::cell::RefCell;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Mutex;
+    use std::time::{Duration, Instant};
 
     thread_local! {
         static STORE: RefCell<Option<Retained<EKEventStore>>> = const { RefCell::new(None) };
     }
     static SESSION_GRANTED: AtomicBool = AtomicBool::new(false);
+    static SESSION_REMINDERS_GRANTED: AtomicBool = AtomicBool::new(false);
     static NEEDS_RESET: AtomicBool = AtomicBool::new(false);
 
     fn require_main_thread() {
@@ -326,6 +394,10 @@ mod macos {
 
     fn status_code() -> isize {
         unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) }.0
+    }
+
+    fn reminder_status_code() -> isize {
+        unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Reminder) }.0
     }
 
     fn new_store() -> Retained<EKEventStore> {
@@ -360,8 +432,17 @@ mod macos {
         NEEDS_RESET.store(true, Ordering::SeqCst);
     }
 
+    fn mark_reminders_granted() {
+        SESSION_REMINDERS_GRANTED.store(true, Ordering::SeqCst);
+        NEEDS_RESET.store(true, Ordering::SeqCst);
+    }
+
     fn granted_this_session() -> bool {
         SESSION_GRANTED.load(Ordering::SeqCst)
+    }
+
+    fn reminders_granted_this_session() -> bool {
+        SESSION_REMINDERS_GRANTED.load(Ordering::SeqCst)
     }
 
     pub fn finish_access_request(granted: bool) {
@@ -381,9 +462,9 @@ mod macos {
         app.activateIgnoringOtherApps(true);
     }
 
-    fn open_calendar_privacy_settings() -> Result<(), String> {
+    fn open_privacy_settings(urls: &[&str], label: &str) -> Result<(), String> {
         let workspace = NSWorkspace::sharedWorkspace();
-        for url in CALENDAR_PRIVACY_URLS {
+        for url in urls {
             let Some(target) = NSURL::URLWithString(&NSString::from_str(url)) else {
                 continue;
             };
@@ -391,7 +472,15 @@ mod macos {
                 return Ok(());
             }
         }
-        Err("Could not open Calendar privacy settings".into())
+        Err(format!("Could not open {label} privacy settings"))
+    }
+
+    pub(crate) fn open_calendar_privacy_settings() -> Result<(), String> {
+        open_privacy_settings(CALENDAR_PRIVACY_URLS, "Calendar")
+    }
+
+    pub(crate) fn open_reminder_privacy_settings() -> Result<(), String> {
+        open_privacy_settings(REMINDER_PRIVACY_URLS, "Reminders")
     }
 
     fn request_access(
@@ -460,6 +549,81 @@ mod macos {
         false
     }
 
+    fn request_reminders_access(
+        store: Retained<EKEventStore>,
+        reply: impl FnOnce(Result<bool, String>) + Send + 'static,
+    ) {
+        let reply = Mutex::new(Some(reply));
+        let completion = RcBlock::new(
+            move |granted: Bool, error: *mut objc2_foundation::NSError| {
+                let result = if let Some(error) = unsafe { error.as_ref() } {
+                    Err(error.localizedDescription().to_string())
+                } else {
+                    Ok(granted.as_bool())
+                };
+                if matches!(result, Ok(true)) {
+                    mark_reminders_granted();
+                }
+                if let Some(reply) = reply.lock().ok().and_then(|mut slot| slot.take()) {
+                    reply(result);
+                }
+            },
+        );
+        unsafe {
+            #[allow(deprecated)]
+            if available!(macos = 14.0) {
+                store.requestFullAccessToRemindersWithCompletion(RcBlock::as_ptr(&completion));
+            } else {
+                store.requestAccessToEntityType_completion(
+                    EKEntityType::Reminder,
+                    RcBlock::as_ptr(&completion),
+                );
+            }
+        }
+        std::mem::forget(completion);
+    }
+
+    pub fn begin_reminders_access_request(
+        reply: impl FnOnce(Result<bool, String>) + Send + 'static,
+    ) {
+        require_main_thread();
+        match access_action(reminder_status_code()) {
+            AccessAction::Granted => {
+                mark_reminders_granted();
+                reply(Ok(true));
+            }
+            AccessAction::OpenSettings => {
+                activate_app();
+                reply(open_reminder_privacy_settings().map(|()| false));
+            }
+            AccessAction::RequestPrompt => {
+                activate_app();
+                request_reminders_access(event_store(), reply);
+            }
+        }
+    }
+
+    pub fn finish_reminders_access_request(granted: bool) {
+        require_main_thread();
+        if granted {
+            mark_reminders_granted();
+        }
+        refresh_after_access_change();
+    }
+
+    pub fn has_reminders_access() -> bool {
+        require_main_thread();
+        if can_fetch_events(reminder_status_code(), reminders_granted_this_session()) {
+            return true;
+        }
+        refresh_after_access_change();
+        if access_granted(reminder_status_code()) {
+            mark_reminders_granted();
+            return true;
+        }
+        false
+    }
+
     fn ns_string(value: &NSString) -> String {
         value.to_string()
     }
@@ -480,7 +644,106 @@ mod macos {
         Response::Confirmed
     }
 
-    pub fn fetch_macos_range(start_ms: i64, end_ms: i64) -> Result<Vec<UpcomingEvent>, String> {
+    fn calendar_hex(calendar: &EKCalendar) -> Option<String> {
+        let color = unsafe { calendar.color() };
+        let srgb = color.colorUsingColorSpace(&NSColorSpace::sRGBColorSpace())?;
+        let mut red = 0.0;
+        let mut green = 0.0;
+        let mut blue = 0.0;
+        let mut alpha = 0.0;
+        unsafe {
+            srgb.getRed_green_blue_alpha(&mut red, &mut green, &mut blue, &mut alpha);
+        }
+        let byte = |value: f64| (value * 255.0).round().clamp(0.0, 255.0) as u8;
+        Some(format!(
+            "#{:02X}{:02X}{:02X}",
+            byte(red),
+            byte(green),
+            byte(blue)
+        ))
+    }
+
+    fn calendar_source_title(source: Option<Retained<EKSource>>) -> Option<String> {
+        source.map(|value| {
+            let title = unsafe { value.title() };
+            ns_string(&title)
+        })
+    }
+
+    fn collect_calendars(
+        store: &EKEventStore,
+        entity: EKEntityType,
+        kind: &str,
+    ) -> Vec<super::CalendarInfo> {
+        let calendars = unsafe { store.calendarsForEntityType(entity) };
+        let mut found = Vec::new();
+        for index in 0..calendars.count() {
+            let calendar = calendars.objectAtIndex(index);
+            let id_obj = unsafe { calendar.calendarIdentifier() };
+            let id = ns_string(&id_obj);
+            if id.is_empty() {
+                continue;
+            }
+            let title_obj = unsafe { calendar.title() };
+            let title = ns_string(&title_obj);
+            found.push(super::CalendarInfo {
+                id,
+                title: if title.is_empty() {
+                    if kind == "reminder" {
+                        "Untitled list".into()
+                    } else {
+                        "Untitled calendar".into()
+                    }
+                } else {
+                    title
+                },
+                source: calendar_source_title(unsafe { calendar.source() }),
+                color: calendar_hex(&calendar),
+                kind: kind.into(),
+            });
+        }
+        found
+    }
+
+    pub fn list_macos() -> Result<Vec<super::CalendarInfo>, String> {
+        require_main_thread();
+        autoreleasepool(|_| {
+            let store = event_store();
+            if NEEDS_RESET.load(Ordering::SeqCst) {
+                unsafe {
+                    store.reset();
+                    store.refreshSourcesIfNecessary();
+                }
+                NEEDS_RESET.store(false, Ordering::SeqCst);
+            } else {
+                unsafe { store.refreshSourcesIfNecessary() };
+            }
+            let mut found = Vec::new();
+            if can_fetch_events(status_code(), granted_this_session()) {
+                found.extend(collect_calendars(&store, EKEntityType::Event, "event"));
+            }
+            if can_fetch_events(reminder_status_code(), reminders_granted_this_session()) {
+                found.extend(collect_calendars(
+                    &store,
+                    EKEntityType::Reminder,
+                    "reminder",
+                ));
+            }
+            found.sort_by(|left, right| {
+                left.kind
+                    .cmp(&right.kind)
+                    .then_with(|| left.source.cmp(&right.source))
+                    .then_with(|| left.title.cmp(&right.title))
+            });
+            Ok(found)
+        })
+    }
+
+    pub fn fetch_macos_range(
+        start_ms: i64,
+        end_ms: i64,
+        hidden: &[String],
+    ) -> Result<Vec<UpcomingEvent>, String> {
         require_main_thread();
         autoreleasepool(|_| {
             let store = event_store();
@@ -530,6 +793,13 @@ mod macos {
                     notes.as_deref(),
                 );
                 let raw_calendar: Option<Retained<EKCalendar>> = unsafe { event.calendar() };
+                let calendar_id = raw_calendar.as_ref().map(|value| {
+                    let id_obj = unsafe { value.calendarIdentifier() };
+                    ns_string(&id_obj)
+                });
+                if !super::calendar_is_visible(calendar_id.as_deref(), hidden) {
+                    continue;
+                }
                 let calendar: Option<String> = raw_calendar.map(|value| {
                     let title = unsafe { value.title() };
                     ns_string(&title)
@@ -550,20 +820,142 @@ mod macos {
                     location: location.filter(|value| !value.is_empty()),
                     join_url,
                     response: own_response(&event),
+                    kind: "event".into(),
+                    all_day: false,
                 });
+            }
+            if can_fetch_events(reminder_status_code(), reminders_granted_this_session()) {
+                found.extend(fetch_macos_reminders(&store, start_ms, end_ms, hidden)?);
             }
             found.sort_by_key(|event| event.start_at);
             Ok(found)
         })
     }
 
-    pub fn fetch_macos() -> Result<Option<UpcomingEvent>, String> {
+    fn reminder_due(components: &NSDateComponents) -> Option<(i64, bool)> {
+        if components.year() == NSDateComponentUndefined
+            || components.month() == NSDateComponentUndefined
+            || components.day() == NSDateComponentUndefined
+        {
+            return None;
+        }
+        let all_day = components.hour() == NSDateComponentUndefined;
+        let calendar = NSCalendar::currentCalendar();
+        let date = calendar.dateFromComponents(components)?;
+        Some(((date.timeIntervalSince1970() * 1000.0) as i64, all_day))
+    }
+
+    fn fetch_macos_reminders(
+        store: &EKEventStore,
+        start_ms: i64,
+        end_ms: i64,
+        hidden: &[String],
+    ) -> Result<Vec<UpcomingEvent>, String> {
+        let start = NSDate::dateWithTimeIntervalSince1970(start_ms as f64 / 1000.0);
+        let end = NSDate::dateWithTimeIntervalSince1970(end_ms as f64 / 1000.0);
+        let predicate = unsafe {
+            store.predicateForIncompleteRemindersWithDueDateStarting_ending_calendars(
+                Some(&start),
+                Some(&end),
+                None,
+            )
+        };
+        let hidden = hidden.to_vec();
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let completion = RcBlock::new(move |reminders: *mut objc2_foundation::NSArray<EKReminder>| {
+            let mut found = Vec::new();
+            if let Some(list) = unsafe { reminders.as_ref() } {
+                for index in 0..list.count() {
+                    let reminder = list.objectAtIndex(index);
+                    if unsafe { reminder.isCompleted() } {
+                        continue;
+                    }
+                    let Some(components) = (unsafe { reminder.dueDateComponents() }) else {
+                        continue;
+                    };
+                    let Some((due_ms, all_day)) = reminder_due(&components) else {
+                        continue;
+                    };
+                    let raw_calendar: Option<Retained<EKCalendar>> = unsafe { reminder.calendar() };
+                    let calendar_id = raw_calendar.as_ref().map(|value| {
+                        let id_obj = unsafe { value.calendarIdentifier() };
+                        ns_string(&id_obj)
+                    });
+                    if !super::calendar_is_visible(calendar_id.as_deref(), &hidden) {
+                        continue;
+                    }
+                    let title_obj = unsafe { reminder.title() };
+                    let title = ns_string(&title_obj);
+                    let id_obj = unsafe { reminder.calendarItemIdentifier() };
+                    let id = ns_string(&id_obj);
+                    let (start_at, end_at) = super::reminder_span(due_ms, all_day);
+                    found.push(UpcomingEvent {
+                        id: format!("{}{id}", super::REMINDER_ID_PREFIX),
+                        title: if title.is_empty() {
+                            "Untitled reminder".into()
+                        } else {
+                            title
+                        },
+                        start_at,
+                        end_at,
+                        calendar: raw_calendar.map(|value| {
+                            let title = unsafe { value.title() };
+                            ns_string(&title)
+                        }),
+                        location: None,
+                        join_url: None,
+                        response: Response::Confirmed,
+                        kind: "reminder".into(),
+                        all_day,
+                    });
+                }
+            }
+            let _ = sender.send(found);
+        });
+        unsafe {
+            store.fetchRemindersMatchingPredicate_completion(&predicate, &completion);
+        }
+        std::mem::forget(completion);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Ok(found) = receiver.try_recv() {
+                return Ok(found);
+            }
+            if Instant::now() >= deadline {
+                return Err("Could not read reminders".into());
+            }
+            NSRunLoop::currentRunLoop().runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.05));
+        }
+    }
+
+    pub fn fetch_macos(hidden: &[String]) -> Result<Option<UpcomingEvent>, String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|error| error.to_string())?;
         let start_ms = now.as_millis() as i64;
         let end_ms = start_ms.saturating_add(7 * 24 * 60 * 60 * 1000);
-        Ok(fetch_macos_range(start_ms, end_ms)?.into_iter().next())
+        Ok(fetch_macos_range(start_ms, end_ms, hidden)?
+            .into_iter()
+            .find(|event| !event.all_day))
+    }
+
+    pub fn open_reminder(id: &str) -> Result<(), String> {
+        let string = NSString::from_str(&reminder_show_url(id));
+        let Some(url) = NSURL::URLWithString(&string) else {
+            return Err("Invalid reminder link".into());
+        };
+        if NSWorkspace::sharedWorkspace().openURL(&url) {
+            return Ok(());
+        }
+        let fallback = NSString::from_str("reminders://");
+        let Some(home) = NSURL::URLWithString(&fallback) else {
+            return Err("Could not open the reminder".into());
+        };
+        if NSWorkspace::sharedWorkspace().openURL(&home) {
+            Ok(())
+        } else {
+            Err("Could not open the reminder in Reminders".into())
+        }
     }
 
     pub fn open_event(id: &str) -> Result<(), String> {
@@ -612,13 +1004,54 @@ pub fn begin_access_request(reply: impl FnOnce(Result<bool, String>) + Send + 's
     reply(Ok(false));
 }
 
-pub fn fetch_upcoming() -> Result<Option<UpcomingEvent>, String> {
+#[cfg(target_os = "macos")]
+pub fn begin_reminders_access_request(reply: impl FnOnce(Result<bool, String>) + Send + 'static) {
+    macos::begin_reminders_access_request(reply);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn begin_reminders_access_request(reply: impl FnOnce(Result<bool, String>) + Send + 'static) {
+    reply(Ok(false));
+}
+
+#[cfg(target_os = "macos")]
+pub fn finish_reminders_access_request(granted: bool) {
+    macos::finish_reminders_access_request(granted);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn finish_reminders_access_request(_granted: bool) {}
+
+pub fn has_reminders_access() -> bool {
     #[cfg(target_os = "macos")]
     {
-        macos::fetch_macos()
+        macos::has_reminders_access()
     }
     #[cfg(not(target_os = "macos"))]
     {
+        false
+    }
+}
+
+pub fn list_calendars() -> Result<Vec<CalendarInfo>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::list_macos()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(Vec::new())
+    }
+}
+
+pub fn fetch_upcoming(hidden: &[String]) -> Result<Option<UpcomingEvent>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::fetch_macos(hidden)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = hidden;
         Ok(None)
     }
 }
@@ -634,17 +1067,43 @@ pub fn has_access() -> bool {
     }
 }
 
-pub fn fetch_range(start_ms: i64, end_ms: i64) -> Result<Vec<UpcomingEvent>, String> {
+pub fn open_calendar_privacy() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::open_calendar_privacy_settings()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Calendar privacy settings are only available on macOS".into())
+    }
+}
+
+pub fn open_reminders_privacy() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::open_reminder_privacy_settings()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Reminders privacy settings are only available on macOS".into())
+    }
+}
+
+pub fn fetch_range(
+    start_ms: i64,
+    end_ms: i64,
+    hidden: &[String],
+) -> Result<Vec<UpcomingEvent>, String> {
     #[cfg(target_os = "macos")]
     {
         if end_ms <= start_ms {
             return Ok(Vec::new());
         }
-        macos::fetch_macos_range(start_ms, end_ms)
+        macos::fetch_macos_range(start_ms, end_ms, hidden)
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (start_ms, end_ms);
+        let _ = (start_ms, end_ms, hidden);
         Ok(Vec::new())
     }
 }
@@ -655,6 +1114,9 @@ pub fn open_event(id: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     {
+        if let Some(reminder_id) = id.strip_prefix(REMINDER_ID_PREFIX) {
+            return macos::open_reminder(reminder_id);
+        }
         macos::open_event(id)
     }
     #[cfg(not(target_os = "macos"))]
@@ -678,8 +1140,10 @@ pub fn open_meeting(url: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        access_action, access_granted, can_fetch_events, event_show_url, extract_join_url,
-        response_for, AccessAction, Response, CALENDAR_PRIVACY_URLS,
+        access_action, access_granted, calendar_is_visible, can_fetch_events, event_show_url,
+        extract_join_url, reminder_show_url, reminder_span, response_for, AccessAction,
+        Response,
+        CALENDAR_PRIVACY_URLS, REMINDER_PRIVACY_URLS,
     };
 
     #[test]
@@ -721,6 +1185,12 @@ mod tests {
         assert!(CALENDAR_PRIVACY_URLS
             .iter()
             .any(|url| url.contains("preference.security")));
+        assert!(CALENDAR_PRIVACY_URLS
+            .iter()
+            .any(|url| url.ends_with("Privacy_Calendars")));
+        assert!(REMINDER_PRIVACY_URLS
+            .iter()
+            .any(|url| url.ends_with("Privacy_Reminders")));
     }
 
     #[test]
@@ -731,6 +1201,34 @@ mod tests {
         );
         assert!(event_show_url("A1B2:C3D4").starts_with("ical://ekevent/A1B2%3AC3D4?"));
         assert!(event_show_url("with space/slash").contains("with%20space%2Fslash"));
+    }
+
+    #[test]
+    fn reminder_slots_cover_a_day_or_a_short_timed_window() {
+        assert_eq!(reminder_span(1_000, false), (1_000, 1_000 + 15 * 60 * 1000));
+        assert_eq!(
+            reminder_span(1_000, true),
+            (1_000, 1_000 + 24 * 60 * 60 * 1000)
+        );
+    }
+
+    #[test]
+    fn reminder_links_open_the_reminders_item() {
+        assert!(reminder_show_url("ABC-123").starts_with("x-apple-reminderkit://REMCDReminder/ABC-123"));
+        assert!(reminder_show_url("A:B").contains("A%3AB"));
+        assert!(REMINDER_PRIVACY_URLS
+            .iter()
+            .any(|url| url.contains("Privacy_Reminders")));
+    }
+
+    #[test]
+    fn hidden_calendars_are_skipped_and_unnamed_ones_stay() {
+        assert!(calendar_is_visible(Some("home"), &[]));
+        assert!(!calendar_is_visible(
+            Some("work"),
+            &["work".into(), "birthdays".into()]
+        ));
+        assert!(calendar_is_visible(None, &["work".into()]));
     }
 
     #[test]

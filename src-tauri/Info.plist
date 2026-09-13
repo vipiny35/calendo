@@ -6,6 +6,10 @@
   <string>Calendo uses your calendars to show your next meeting in the menu bar.</string>
   <key>NSCalendarsFullAccessUsageDescription</key>
   <string>Calendo uses your calendars to show your next meeting in the menu bar.</string>
+  <key>NSRemindersUsageDescription</key>
+  <string>Calendo uses scheduled reminders so they can appear next to your calendar events.</string>
+  <key>NSRemindersFullAccessUsageDescription</key>
+  <string>Calendo uses scheduled reminders so they can appear next to your calendar events.</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.productivity</string>
 </dict>

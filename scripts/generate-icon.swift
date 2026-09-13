@@ -38,36 +38,27 @@ func drawAppIcon() -> NSImage {
         page.setFill()
         roundedRect(card, radius: radius * 0.42).fill()
 
+        // pngData flips this drawing, so the header is painted on the card's
+        // maxY edge and lands at the top of the exported icon.
         let bandHeight = card.height * 0.22
-        let band = NSRect(x: card.minX, y: card.minY, width: card.width, height: bandHeight)
-        let bandPath = NSBezierPath()
-        bandPath.move(to: NSPoint(x: band.minX + radius * 0.42, y: band.minY))
-        bandPath.line(to: NSPoint(x: band.maxX - radius * 0.42, y: band.minY))
-        bandPath.appendArc(
-            withCenter: NSPoint(x: band.maxX - radius * 0.42, y: band.minY + radius * 0.42),
-            radius: radius * 0.42,
-            startAngle: -90,
-            endAngle: 0
-        )
-        bandPath.line(to: NSPoint(x: band.maxX, y: band.maxY))
-        bandPath.line(to: NSPoint(x: band.minX, y: band.maxY))
-        bandPath.line(to: NSPoint(x: band.minX, y: band.minY + radius * 0.42))
-        bandPath.appendArc(
-            withCenter: NSPoint(x: band.minX + radius * 0.42, y: band.minY + radius * 0.42),
-            radius: radius * 0.42,
-            startAngle: 180,
-            endAngle: 270
-        )
-        bandPath.close()
+        let corner = radius * 0.42
+        NSGraphicsContext.saveGraphicsState()
+        roundedRect(card, radius: corner).addClip()
         header.setFill()
-        bandPath.fill()
+        NSRect(
+            x: card.minX,
+            y: card.maxY - bandHeight,
+            width: card.width,
+            height: bandHeight
+        ).fill()
+        NSGraphicsContext.restoreGraphicsState()
 
-        let gridTop = card.minY + bandHeight + card.height * 0.08
+        let gridTop = card.minY + card.height * 0.1
         let grid = NSRect(
             x: card.minX + card.width * 0.12,
             y: gridTop,
             width: card.width * 0.76,
-            height: card.maxY - gridTop - card.height * 0.1
+            height: card.maxY - bandHeight - card.height * 0.08 - gridTop
         )
         let cols = 4
         let rows = 3

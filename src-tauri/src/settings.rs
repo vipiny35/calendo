@@ -45,6 +45,7 @@ pub struct AppSettings {
     pub beep_on_the_hour: bool,
     pub show_upcoming_event: bool,
     pub upcoming_horizon_hours: u8,
+    pub hidden_calendar_ids: Vec<String>,
     pub auto_update: bool,
     pub theme: String,
 }
@@ -64,6 +65,7 @@ impl Default for AppSettings {
             beep_on_the_hour: false,
             show_upcoming_event: false,
             upcoming_horizon_hours: 6,
+            hidden_calendar_ids: Vec::new(),
             auto_update: true,
             theme: "system".into(),
         }
@@ -98,7 +100,7 @@ impl AppSettings {
         if !matches!(self.theme.as_str(), "system" | "light" | "dark") {
             self.theme = base.theme.clone();
         }
-        if !matches!(self.upcoming_horizon_hours, 1 | 2 | 4 | 6 | 8) {
+        if !matches!(self.upcoming_horizon_hours, 1 | 2 | 4 | 6 | 8 | 12 | 24 | 48) {
             self.upcoming_horizon_hours = base.upcoming_horizon_hours;
         }
         let mut days: Vec<u8> = self
@@ -110,6 +112,14 @@ impl AppSettings {
         days.sort_unstable();
         days.dedup();
         self.highlight_weekdays = days;
+        let mut calendars: Vec<String> = self
+            .hidden_calendar_ids
+            .into_iter()
+            .filter(|id| !id.is_empty())
+            .collect();
+        calendars.sort();
+        calendars.dedup();
+        self.hidden_calendar_ids = calendars;
         self
     }
 }
@@ -258,7 +268,25 @@ mod tests {
         input.upcoming_horizon_hours = 2;
         assert_eq!(input.clone().normalize(&base).upcoming_horizon_hours, 2);
         input.upcoming_horizon_hours = 3;
-        assert_eq!(input.normalize(&base).upcoming_horizon_hours, 6);
+        assert_eq!(input.clone().normalize(&base).upcoming_horizon_hours, 6);
+        input.upcoming_horizon_hours = 12;
+        assert_eq!(input.clone().normalize(&base).upcoming_horizon_hours, 12);
+        input.upcoming_horizon_hours = 24;
+        assert_eq!(input.clone().normalize(&base).upcoming_horizon_hours, 24);
+        input.upcoming_horizon_hours = 48;
+        assert_eq!(input.normalize(&base).upcoming_horizon_hours, 48);
+    }
+
+    #[test]
+    fn keeps_hidden_calendars_and_drops_empty_duplicates() {
+        let base = AppSettings::default();
+        let mut input = base.clone();
+        input.hidden_calendar_ids =
+            vec!["work".into(), String::new(), "home".into(), "work".into()];
+        assert_eq!(
+            input.normalize(&base).hidden_calendar_ids,
+            vec!["home".to_string(), "work".to_string()]
+        );
     }
 
     #[test]
@@ -285,6 +313,7 @@ mod tests {
         assert!(body.contains("\"beepOnTheHour\""));
         assert!(body.contains("\"showUpcomingEvent\""));
         assert!(body.contains("\"upcomingHorizonHours\""));
+        assert!(body.contains("\"hiddenCalendarIds\""));
         assert!(body.contains("\"weekStartsOn\""));
         assert!(body.contains("\"highlightWeekdays\""));
         assert!(body.contains("\"launchAtLogin\""));
