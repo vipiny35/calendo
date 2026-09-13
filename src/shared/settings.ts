@@ -16,8 +16,17 @@ export type AppSettings = {
   beepOnTheHour: boolean;
   showUpcomingEvent: boolean;
   upcomingHorizonHours: UpcomingHorizonHours;
+  /** EventKit identifiers the upcoming-event list should ignore. Empty shows every calendar. */
+  hiddenCalendarIds: string[];
   autoUpdate: boolean;
   theme: Theme;
+};
+
+export type CalendarInfo = {
+  id: string;
+  title: string;
+  source: string | null;
+  color: string | null;
 };
 
 export type MenuBarPart = "weekday" | "day" | "month";
@@ -95,6 +104,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   beepOnTheHour: false,
   showUpcomingEvent: false,
   upcomingHorizonHours: 6,
+  hiddenCalendarIds: [],
   autoUpdate: true,
   theme: "system",
 };
@@ -121,6 +131,41 @@ export function weekdayLetter(id: Weekday, locale?: string): string {
 export function normalizeHighlightWeekdays(value: unknown): Weekday[] {
   if (!Array.isArray(value)) return [...DEFAULT_HIGHLIGHT_WEEKDAYS];
   return [...new Set(value.filter(isWeekday))].sort((a, b) => a - b);
+}
+
+export function normalizeHiddenCalendarIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter((item): item is string => typeof item === "string" && item.length > 0),
+    ),
+  ].sort();
+}
+
+export function calendarIsVisible(
+  calendarId: string | null | undefined,
+  hidden: readonly string[],
+): boolean {
+  if (!calendarId) return true;
+  return !hidden.includes(calendarId);
+}
+
+/** Adjacent calendars from the same account, titles A–Z inside each group. */
+export function groupCalendarsBySource(
+  calendars: readonly CalendarInfo[],
+): { source: string; calendars: CalendarInfo[] }[] {
+  const groups = new Map<string, CalendarInfo[]>();
+  for (const calendar of [...calendars].sort((a, b) =>
+    a.title.localeCompare(b.title, "en", { sensitivity: "base" }),
+  )) {
+    const source = calendar.source?.trim() || "Other";
+    const list = groups.get(source) ?? [];
+    list.push(calendar);
+    groups.set(source, list);
+  }
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, "en", { sensitivity: "base" }))
+    .map(([source, items]) => ({ source, calendars: items }));
 }
 
 /**
@@ -266,6 +311,10 @@ export function normalizeSettings(raw: unknown): AppSettings {
     upcomingHorizonHours: HORIZON_HOURS.has(input.upcomingHorizonHours as number)
       ? (input.upcomingHorizonHours as UpcomingHorizonHours)
       : DEFAULT_SETTINGS.upcomingHorizonHours,
+    hiddenCalendarIds:
+      "hiddenCalendarIds" in input
+        ? normalizeHiddenCalendarIds(input.hiddenCalendarIds)
+        : [...DEFAULT_SETTINGS.hiddenCalendarIds],
     autoUpdate: asBoolean(input.autoUpdate, DEFAULT_SETTINGS.autoUpdate),
     theme: THEMES.has(theme as Theme) ? (theme as Theme) : DEFAULT_SETTINGS.theme,
   };

@@ -13,6 +13,13 @@ it("passes calendar range arguments using Tauri's camelCase command convention",
   });
 });
 
+it("lists calendars through the same command bridge", async () => {
+  const invoke = vi.fn().mockResolvedValue([]);
+  vi.stubGlobal("window", { __TAURI__: { core: { invoke } } });
+  await expect(api.listCalendars()).resolves.toEqual([]);
+  expect(invoke).toHaveBeenCalledWith("list_calendars", undefined);
+});
+
 it("waits for the native calendar permission result", async () => {
   const invoke = vi.fn().mockResolvedValue(true);
   vi.stubGlobal("window", { __TAURI__: { core: { invoke } } });

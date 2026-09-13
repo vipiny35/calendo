@@ -45,6 +45,7 @@ pub struct AppSettings {
     pub beep_on_the_hour: bool,
     pub show_upcoming_event: bool,
     pub upcoming_horizon_hours: u8,
+    pub hidden_calendar_ids: Vec<String>,
     pub auto_update: bool,
     pub theme: String,
 }
@@ -64,6 +65,7 @@ impl Default for AppSettings {
             beep_on_the_hour: false,
             show_upcoming_event: false,
             upcoming_horizon_hours: 6,
+            hidden_calendar_ids: Vec::new(),
             auto_update: true,
             theme: "system".into(),
         }
@@ -110,6 +112,14 @@ impl AppSettings {
         days.sort_unstable();
         days.dedup();
         self.highlight_weekdays = days;
+        let mut calendars: Vec<String> = self
+            .hidden_calendar_ids
+            .into_iter()
+            .filter(|id| !id.is_empty())
+            .collect();
+        calendars.sort();
+        calendars.dedup();
+        self.hidden_calendar_ids = calendars;
         self
     }
 }
@@ -262,6 +272,18 @@ mod tests {
     }
 
     #[test]
+    fn keeps_hidden_calendars_and_drops_empty_duplicates() {
+        let base = AppSettings::default();
+        let mut input = base.clone();
+        input.hidden_calendar_ids =
+            vec!["work".into(), String::new(), "home".into(), "work".into()];
+        assert_eq!(
+            input.normalize(&base).hidden_calendar_ids,
+            vec!["home".to_string(), "work".to_string()]
+        );
+    }
+
+    #[test]
     fn keeps_monday_as_a_week_start() {
         let base = AppSettings::default();
         let mut input = base.clone();
@@ -285,6 +307,7 @@ mod tests {
         assert!(body.contains("\"beepOnTheHour\""));
         assert!(body.contains("\"showUpcomingEvent\""));
         assert!(body.contains("\"upcomingHorizonHours\""));
+        assert!(body.contains("\"hiddenCalendarIds\""));
         assert!(body.contains("\"weekStartsOn\""));
         assert!(body.contains("\"highlightWeekdays\""));
         assert!(body.contains("\"launchAtLogin\""));

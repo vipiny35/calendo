@@ -37,6 +37,24 @@ it("hides access controls when already authorized after restart", async () => {
   expect(elements.row.hidden).toBe(true);
 });
 
+it("tells settings when access appears so the calendar list can load", async () => {
+  const onGrantedChange = vi.fn();
+  const api = {
+    getCalendarAccess: vi.fn().mockResolvedValue(true),
+    requestCalendarAccess: vi.fn().mockResolvedValue(true),
+  };
+  const elements = {
+    status: { hidden: true, textContent: "" },
+    row: { hidden: false },
+    button: Object.assign(new EventTarget(), { disabled: false }),
+    toggle: Object.assign(new EventTarget(), { checked: true }),
+    onGrantedChange,
+  };
+  const refresh = bindCalendarAccess(api, elements);
+  await refresh();
+  expect(onGrantedChange).toHaveBeenCalledWith(true);
+});
+
 it("ignores stale permission checks after a new permission request", async () => {
   const { api, elements, refresh } = setup(false);
   let resolve!: (value: boolean) => void;

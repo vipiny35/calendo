@@ -42,6 +42,23 @@ pub struct UpcomingEvent {
     pub response: Response,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarInfo {
+    pub id: String,
+    pub title: String,
+    pub source: Option<String>,
+    pub color: Option<String>,
+}
+
+/// Missing identifiers stay visible so a calendar EventKit cannot name is not dropped.
+pub(crate) fn calendar_is_visible(calendar_id: Option<&str>, hidden: &[String]) -> bool {
+    match calendar_id {
+        None => true,
+        Some(id) => !hidden.iter().any(|item| item == id),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AccessAction {
     Granted,
@@ -304,8 +321,8 @@ mod macos {
     use objc2::rc::{autoreleasepool, Retained};
     use objc2::runtime::Bool;
     use objc2::{available, AnyThread};
-    use objc2_app_kit::{NSApplication, NSWorkspace};
-    use objc2_event_kit::{EKCalendar, EKEntityType, EKEventStore};
+    use objc2_app_kit::{NSApplication, NSColorSpace, NSWorkspace};
+    use objc2_event_kit::{EKCalendar, EKEntityType, EKEventStore, EKSource};
     use objc2_foundation::{MainThreadMarker, NSDate, NSString, NSURL};
     use std::cell::RefCell;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -480,7 +497,84 @@ mod macos {
         Response::Confirmed
     }
 
-    pub fn fetch_macos_range(start_ms: i64, end_ms: i64) -> Result<Vec<UpcomingEvent>, String> {
+    fn calendar_hex(calendar: &EKCalendar) -> Option<String> {
+        let color = unsafe { calendar.color() };
+        let srgb = color.colorUsingColorSpace(&NSColorSpace::sRGBColorSpace())?;
+        let mut red = 0.0;
+        let mut green = 0.0;
+        let mut blue = 0.0;
+        let mut alpha = 0.0;
+        unsafe {
+            srgb.getRed_green_blue_alpha(&mut red, &mut green, &mut blue, &mut alpha);
+        }
+        let byte = |value: f64| (value * 255.0).round().clamp(0.0, 255.0) as u8;
+        Some(format!(
+            "#{:02X}{:02X}{:02X}",
+            byte(red),
+            byte(green),
+            byte(blue)
+        ))
+    }
+
+    fn calendar_source_title(source: Option<Retained<EKSource>>) -> Option<String> {
+        source.map(|value| {
+            let title = unsafe { value.title() };
+            ns_string(&title)
+        })
+    }
+
+    pub fn list_macos() -> Result<Vec<super::CalendarInfo>, String> {
+        require_main_thread();
+        autoreleasepool(|_| {
+            let store = event_store();
+            if NEEDS_RESET.load(Ordering::SeqCst) {
+                unsafe {
+                    store.reset();
+                    store.refreshSourcesIfNecessary();
+                }
+                NEEDS_RESET.store(false, Ordering::SeqCst);
+            } else {
+                unsafe { store.refreshSourcesIfNecessary() };
+            }
+            if !can_fetch_events(status_code(), granted_this_session()) {
+                return Ok(Vec::new());
+            }
+            let calendars = unsafe { store.calendarsForEntityType(EKEntityType::Event) };
+            let mut found = Vec::new();
+            for index in 0..calendars.count() {
+                let calendar = calendars.objectAtIndex(index);
+                let id_obj = unsafe { calendar.calendarIdentifier() };
+                let id = ns_string(&id_obj);
+                if id.is_empty() {
+                    continue;
+                }
+                let title_obj = unsafe { calendar.title() };
+                let title = ns_string(&title_obj);
+                found.push(super::CalendarInfo {
+                    id,
+                    title: if title.is_empty() {
+                        "Untitled calendar".into()
+                    } else {
+                        title
+                    },
+                    source: calendar_source_title(unsafe { calendar.source() }),
+                    color: calendar_hex(&calendar),
+                });
+            }
+            found.sort_by(|left, right| {
+                left.source
+                    .cmp(&right.source)
+                    .then_with(|| left.title.cmp(&right.title))
+            });
+            Ok(found)
+        })
+    }
+
+    pub fn fetch_macos_range(
+        start_ms: i64,
+        end_ms: i64,
+        hidden: &[String],
+    ) -> Result<Vec<UpcomingEvent>, String> {
         require_main_thread();
         autoreleasepool(|_| {
             let store = event_store();
@@ -530,6 +624,13 @@ mod macos {
                     notes.as_deref(),
                 );
                 let raw_calendar: Option<Retained<EKCalendar>> = unsafe { event.calendar() };
+                let calendar_id = raw_calendar.as_ref().map(|value| {
+                    let id_obj = unsafe { value.calendarIdentifier() };
+                    ns_string(&id_obj)
+                });
+                if !super::calendar_is_visible(calendar_id.as_deref(), hidden) {
+                    continue;
+                }
                 let calendar: Option<String> = raw_calendar.map(|value| {
                     let title = unsafe { value.title() };
                     ns_string(&title)
@@ -557,13 +658,15 @@ mod macos {
         })
     }
 
-    pub fn fetch_macos() -> Result<Option<UpcomingEvent>, String> {
+    pub fn fetch_macos(hidden: &[String]) -> Result<Option<UpcomingEvent>, String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|error| error.to_string())?;
         let start_ms = now.as_millis() as i64;
         let end_ms = start_ms.saturating_add(7 * 24 * 60 * 60 * 1000);
-        Ok(fetch_macos_range(start_ms, end_ms)?.into_iter().next())
+        Ok(fetch_macos_range(start_ms, end_ms, hidden)?
+            .into_iter()
+            .next())
     }
 
     pub fn open_event(id: &str) -> Result<(), String> {
@@ -612,13 +715,25 @@ pub fn begin_access_request(reply: impl FnOnce(Result<bool, String>) + Send + 's
     reply(Ok(false));
 }
 
-pub fn fetch_upcoming() -> Result<Option<UpcomingEvent>, String> {
+pub fn list_calendars() -> Result<Vec<CalendarInfo>, String> {
     #[cfg(target_os = "macos")]
     {
-        macos::fetch_macos()
+        macos::list_macos()
     }
     #[cfg(not(target_os = "macos"))]
     {
+        Ok(Vec::new())
+    }
+}
+
+pub fn fetch_upcoming(hidden: &[String]) -> Result<Option<UpcomingEvent>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::fetch_macos(hidden)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = hidden;
         Ok(None)
     }
 }
@@ -634,17 +749,21 @@ pub fn has_access() -> bool {
     }
 }
 
-pub fn fetch_range(start_ms: i64, end_ms: i64) -> Result<Vec<UpcomingEvent>, String> {
+pub fn fetch_range(
+    start_ms: i64,
+    end_ms: i64,
+    hidden: &[String],
+) -> Result<Vec<UpcomingEvent>, String> {
     #[cfg(target_os = "macos")]
     {
         if end_ms <= start_ms {
             return Ok(Vec::new());
         }
-        macos::fetch_macos_range(start_ms, end_ms)
+        macos::fetch_macos_range(start_ms, end_ms, hidden)
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (start_ms, end_ms);
+        let _ = (start_ms, end_ms, hidden);
         Ok(Vec::new())
     }
 }
@@ -678,8 +797,8 @@ pub fn open_meeting(url: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        access_action, access_granted, can_fetch_events, event_show_url, extract_join_url,
-        response_for, AccessAction, Response, CALENDAR_PRIVACY_URLS,
+        access_action, access_granted, calendar_is_visible, can_fetch_events, event_show_url,
+        extract_join_url, response_for, AccessAction, Response, CALENDAR_PRIVACY_URLS,
     };
 
     #[test]
@@ -731,6 +850,16 @@ mod tests {
         );
         assert!(event_show_url("A1B2:C3D4").starts_with("ical://ekevent/A1B2%3AC3D4?"));
         assert!(event_show_url("with space/slash").contains("with%20space%2Fslash"));
+    }
+
+    #[test]
+    fn hidden_calendars_are_skipped_and_unnamed_ones_stay() {
+        assert!(calendar_is_visible(Some("home"), &[]));
+        assert!(!calendar_is_visible(
+            Some("work"),
+            &["work".into(), "birthdays".into()]
+        ));
+        assert!(calendar_is_visible(None, &["work".into()]));
     }
 
     #[test]

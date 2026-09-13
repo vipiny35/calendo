@@ -10,9 +10,10 @@ export function bindCalendarAccess(
     button: Pick<HTMLButtonElement, "disabled" | "addEventListener">;
     row: Pick<HTMLElement, "hidden">;
     toggle: Pick<HTMLInputElement, "checked" | "addEventListener">;
+    onGrantedChange?: (granted: boolean) => void;
   },
 ): () => Promise<void> {
-  const { status, button, row, toggle } = elements;
+  const { status, button, row, toggle, onGrantedChange } = elements;
   let revision = 0;
   let requesting = false;
 
@@ -22,6 +23,7 @@ export function bindCalendarAccess(
     status.textContent = granted
       ? "Calendar access enabled."
       : "Allow Calendar access in System Settings.";
+    onGrantedChange?.(granted);
   };
   const showError = (error: unknown): void => {
     status.hidden = false;

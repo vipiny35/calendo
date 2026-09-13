@@ -914,9 +914,18 @@ where
         .map_err(|error| error.to_string())?
 }
 
+fn hidden_calendar_ids(app: &AppHandle) -> Vec<String> {
+    app.state::<AppState>()
+        .settings
+        .lock()
+        .map(|store| store.value().hidden_calendar_ids)
+        .unwrap_or_default()
+}
+
 #[tauri::command]
 async fn get_upcoming_event(app: AppHandle) -> Result<Option<events::UpcomingEvent>, String> {
-    on_main_async(app, events::fetch_upcoming).await?
+    let hidden = hidden_calendar_ids(&app);
+    on_main_async(app, move || events::fetch_upcoming(&hidden)).await?
 }
 
 #[tauri::command]
@@ -925,7 +934,13 @@ async fn get_calendar_events(
     start_at: i64,
     end_at: i64,
 ) -> Result<Vec<events::UpcomingEvent>, String> {
-    on_main_async(app, move || events::fetch_range(start_at, end_at)).await?
+    let hidden = hidden_calendar_ids(&app);
+    on_main_async(app, move || events::fetch_range(start_at, end_at, &hidden)).await?
+}
+
+#[tauri::command]
+async fn list_calendars(app: AppHandle) -> Result<Vec<events::CalendarInfo>, String> {
+    on_main_async(app, events::list_calendars).await?
 }
 
 #[tauri::command]
@@ -1112,6 +1127,7 @@ pub fn run() {
             open_repository,
             get_upcoming_event,
             get_calendar_events,
+            list_calendars,
             request_calendar_access,
             get_calendar_access,
             join_meeting,

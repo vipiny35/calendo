@@ -1,11 +1,13 @@
 import {
   supportsDateParts,
+  groupCalendarsBySource,
   HIGHLIGHT_DAYS,
   MENU_BAR_ICONS,
   UPCOMING_HORIZON_HOURS,
   WEEK_STARTS,
   weekdayLetter,
   type AppSettings,
+  type CalendarInfo,
   type MenuBarIconStyle,
   type Theme,
   type UpcomingHorizonHours,
@@ -109,6 +111,7 @@ function startSettings(api: DesktopApi): void {
   const calendarAccessStatus = requireElement<HTMLParagraphElement>("calendar-access-status");
   const calendarAccess = requireElement<HTMLButtonElement>("calendar-access");
   const calendarAccessRow = requireElement<HTMLElement>("calendar-access-row");
+  const calendarSources = requireElement<HTMLElement>("calendar-sources");
   const beepPreview = requireElement<HTMLButtonElement>("beep-preview");
   const theme = requireElement<HTMLSelectElement>("theme");
   const version = requireElement<HTMLParagraphElement>("version");
@@ -182,6 +185,89 @@ function startSettings(api: DesktopApi): void {
     upcomingHorizon.closest(".row")?.classList.toggle("is-off", !enabled);
   };
 
+  let hiddenCalendarIds: string[] = [];
+  let listedCalendars: CalendarInfo[] = [];
+
+  const paintCalendarSelection = (hidden: readonly string[]): void => {
+    const skipped = new Set(hidden);
+    for (const input of Array.from(
+      calendarSources.querySelectorAll<HTMLInputElement>("input[data-calendar-id]"),
+    )) {
+      input.checked = !skipped.has(input.dataset.calendarId ?? "");
+    }
+  };
+
+  const paintCalendarSources = (calendars: CalendarInfo[]): void => {
+    listedCalendars = calendars;
+    if (!calendars.length) {
+      const empty = document.createElement("p");
+      empty.className = "calendar-sources-empty";
+      empty.id = "calendar-sources-label";
+      empty.textContent = "No calendars available.";
+      calendarSources.replaceChildren(empty);
+      return;
+    }
+    const groups = groupCalendarsBySource(calendars);
+    const showGroups = groups.length > 1;
+    const nodes: HTMLElement[] = [];
+    const heading = document.createElement("p");
+    heading.className = showGroups ? "visually-hidden" : "calendar-source-label";
+    heading.id = "calendar-sources-label";
+    heading.textContent = "Calendars";
+    nodes.push(heading);
+    let index = 0;
+    for (const group of groups) {
+      if (showGroups) {
+        const label = document.createElement("p");
+        label.className = "calendar-source-label";
+        label.textContent = group.source;
+        nodes.push(label);
+      }
+      for (const calendar of group.calendars) {
+        const row = document.createElement("div");
+        row.className = "row";
+        const copy = document.createElement("div");
+        copy.className = "copy";
+        const name = document.createElement("label");
+        name.className = "calendar-name";
+        name.htmlFor = `calendar-source-${index}`;
+        const swatch = document.createElement("span");
+        swatch.className = "calendar-swatch";
+        swatch.setAttribute("aria-hidden", "true");
+        if (calendar.color) swatch.style.setProperty("--calendar-color", calendar.color);
+        name.append(swatch, document.createTextNode(calendar.title));
+        copy.append(name);
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.id = `calendar-source-${index}`;
+        input.dataset.calendarId = calendar.id;
+        input.checked = !hiddenCalendarIds.includes(calendar.id);
+        row.append(copy, input);
+        nodes.push(row);
+        index += 1;
+      }
+    }
+    calendarSources.replaceChildren(...nodes);
+  };
+
+  const loadCalendarSources = async (granted: boolean): Promise<void> => {
+    if (!granted) {
+      listedCalendars = [];
+      calendarSources.hidden = true;
+      calendarSources.replaceChildren();
+      return;
+    }
+    try {
+      const calendars = await api.listCalendars();
+      paintCalendarSources(calendars);
+      calendarSources.hidden = false;
+    } catch {
+      listedCalendars = [];
+      calendarSources.hidden = true;
+      calendarSources.replaceChildren();
+    }
+  };
+
   const paint = (settings: AppSettings): void => {
     applyTheme(settings.theme);
     paintIconStyle(iconStyles, settings.menuBarIcon);
@@ -197,6 +283,8 @@ function startSettings(api: DesktopApi): void {
     showUpcoming.checked = settings.showUpcomingEvent;
     upcomingHorizon.value = String(settings.upcomingHorizonHours);
     paintHorizon(settings.showUpcomingEvent);
+    hiddenCalendarIds = settings.hiddenCalendarIds;
+    paintCalendarSelection(settings.hiddenCalendarIds);
     theme.value = settings.theme;
   };
 
@@ -239,11 +327,26 @@ function startSettings(api: DesktopApi): void {
     void api.updateSettings(patch);
   });
 
+  calendarSources.addEventListener("change", (event) => {
+    event.stopPropagation();
+    if (!listedCalendars.length) return;
+    const hidden = Array.from(
+      calendarSources.querySelectorAll<HTMLInputElement>("input[data-calendar-id]"),
+    )
+      .filter((input) => !input.checked && input.dataset.calendarId)
+      .map((input) => input.dataset.calendarId as string);
+    hiddenCalendarIds = hidden;
+    void api.updateSettings({ hiddenCalendarIds: hidden });
+  });
+
   const refreshCalendarAccess = bindCalendarAccess(api, {
     status: calendarAccessStatus,
     button: calendarAccess,
     row: calendarAccessRow,
     toggle: showUpcoming,
+    onGrantedChange: (granted) => {
+      void loadCalendarSources(granted);
+    },
   });
   window.addEventListener("focus", () => void refreshCalendarAccess());
   document.addEventListener("visibilitychange", () => {

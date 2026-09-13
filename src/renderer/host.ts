@@ -1,4 +1,4 @@
-import type { AppSettings } from "../shared/settings";
+import type { AppSettings, CalendarInfo } from "../shared/settings";
 import type { UpcomingEvent } from "../shared/events";
 
 /** An empty version means the running build is current. */
@@ -27,6 +27,7 @@ export type DesktopApi = {
   beep: () => Promise<void>;
   getUpcomingEvent: () => Promise<UpcomingEvent | null>;
   getCalendarEvents: (startAt: number, endAt: number) => Promise<UpcomingEvent[]>;
+  listCalendars: () => Promise<CalendarInfo[]>;
   requestCalendarAccess: () => Promise<boolean>;
   getCalendarAccess: () => Promise<boolean>;
   joinMeeting: (url: string) => Promise<void>;
@@ -95,6 +96,7 @@ export const api: DesktopApi = {
   getUpcomingEvent: () => invoke<UpcomingEvent | null>("get_upcoming_event"),
   getCalendarEvents: (startAt, endAt) =>
     invoke<UpcomingEvent[]>("get_calendar_events", { startAt, endAt }),
+  listCalendars: () => invoke<CalendarInfo[]>("list_calendars"),
   requestCalendarAccess: () => invoke<boolean>("request_calendar_access"),
   getCalendarAccess: () => invoke<boolean>("get_calendar_access"),
   joinMeeting: (url) => invoke<void>("join_meeting", { url }),
