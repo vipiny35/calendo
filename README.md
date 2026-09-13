@@ -1,44 +1,40 @@
 # Calendo
 
-A month calendar in the macOS menu bar. No account to configure, no main
-window, and no data leaving this Mac — just the date next to the clock, and a
-month you can move through without opening Calendar.
+A month calendar in the macOS menu bar. No account, no main window, and
+nothing leaves this Mac.
 
 Apple Silicon and Intel Macs on macOS 13 or newer.
 
-## What it does
+<p align="center">
+  <img src="docs/screenshots/menubar.png" alt="Month calendar and upcoming events in the menu bar" width="920">
+</p>
+<p align="center">
+  <img src="docs/screenshots/settings.png" alt="Settings for appearance, the month, and upcoming events" width="920">
+</p>
 
-Click the date in the menu bar to open this month. Move between months, jump
-back to today, and close it by clicking outside or pressing Escape. Right-click
-either menu bar item for Settings and Quit.
+## Features
 
-The menu bar item can be a filled date, a date inside a rounded outline, a
-calendar, or the date alone. Every style but the filled one can add the weekday
-and the month. Settings control that pairing, which day the week starts on,
-week numbers, highlighted weekdays, appearance, an hourly chime, and whether
-Calendo opens at login.
+- **This month, next to the clock.** Click the date to move through months
+  without opening Calendar.
+- **What’s next.** An optional second menu bar item counts down to the next
+  calendar event or scheduled reminder, and opens a list of what’s coming.
+- **Your calendars, your lists.** Settings → Events chooses the look-ahead
+  and which calendars and reminder lists appear.
+- **Stays on this Mac.** Calendar and Reminders are read locally. Nothing is
+  uploaded.
 
-Optional upcoming-event awareness reads macOS Calendar and adds a second menu
-bar item: a countdown to the next event, which reads `now` for the first ten
-minutes of one in progress, and a popover listing events in the next few hours
-(1, 2, 4, 6, 8, or 12 hours, the rest of today, or the next two days, from
-Settings → Events). That tab also
-chooses which calendars and reminder lists appear in that list; every source is
-shown until you hide some. Scheduled reminders from Reminders.app sit alongside
-events in the same popover, the way Calendar.app draws them. The popover grows to its content
-rather than scrolling. Each row
-marks how you answered the invitation — solid when accepted, hatched for maybe,
-dashed while unanswered, struck through when declined — and opens the event in
-whichever app handles `ical://`, usually Calendar. An event carrying a web link
-gets a join row bearing that service's mark: Meet, Zoom, Teams, Webex,
-FaceTime, Jitsi and GoToMeeting are recognised by host.
-
-Calendar access is requested only after the upcoming-event option is enabled.
-Calendo reads events locally through EventKit and does not upload calendar data.
+Right-click either menu bar item for Settings and Quit. **⌘,** opens Settings.
 
 ## Install
 
-Build from source until a release exists:
+Download the disk image from
+[Releases](https://github.com/vipiny35/calendo/releases/latest) and drag
+Calendo to Applications.
+
+Installed copies can update themselves from Settings → About. Automatic
+updates are on by default.
+
+To build from source:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -47,31 +43,7 @@ pnpm dmg
 ```
 
 Then open the disk image in `src-tauri/target/release/bundle/dmg` and drag
-Calendo to Applications.
-
-Once installed, Calendo can update itself. Settings → General has **Install
-updates automatically** on by default: a signed release downloads and the app
-restarts. Turn it off to keep checking by hand from the About pane. An update
-that cannot verify its signature is refused.
-
-## Use
-
-Calendo stays in the menu bar after you quit every other window.
-
-- **Left click** opens the month.
-- **Right click** on either menu bar item offers Settings and Quit.
-- **The countdown item**, when upcoming events are on, opens the event list.
-- **Arrow keys** move by day or week; **Page Up** / **Page Down** change month;
-  **T** returns to today; **Esc** closes the popover.
-- **⌘,** opens Settings.
-
-Nothing leaves this Mac. There is no account or network connection. Optional
-upcoming events come from the local macOS Calendar database through EventKit.
-
-## Build from source
-
-See [Building](docs/building.md). `pnpm app` launches a development build with
-the menu bar extra.
+Calendo to Applications. See [Building](docs/building.md) for the toolchain.
 
 ## License
 
